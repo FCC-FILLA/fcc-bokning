@@ -7,10 +7,14 @@ export function BookingFields({
   lookups,
   defaultRoom,
   defaultDate,
+  defaultFrom,
+  defaultTo,
 }: {
   lookups: Lookups;
   defaultRoom?: string;
   defaultDate?: string;
+  defaultFrom?: string;
+  defaultTo?: string;
 }) {
   const rooms = lookups.rooms
     .filter((r) => r.bookable)
@@ -24,6 +28,8 @@ export function BookingFields({
       setups={lookups.setups.map((s) => ({ id: s.id, name: s.name }))}
       defaultRoom={defaultRoom}
       defaultDate={defaultDate}
+      defaultFrom={defaultFrom}
+      defaultTo={defaultTo}
     />
   );
 }

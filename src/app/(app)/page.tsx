@@ -152,6 +152,7 @@ export default async function DashboardPage() {
         <span className="flex-1" />
         {canBook(profile) && (
           <>
+            <Link className="btn" href="/ledigt">Hitta ledig lokal</Link>
             <Link className="btn" href="/offerter/ny">Ny offert</Link>
             <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>
           </>
@@ -184,7 +185,7 @@ export default async function DashboardPage() {
                 <h2 className="text-lg font-semibold">{block.label}</h2>
                 <span className="text-sm text-muted">{dayShort(block.d)} {fmtDayMonth(block.d)}</span>
                 <span className="flex-1" />
-                <Link className="text-sm text-muted hover:underline" href={`/vecka?vecka=${addDays(block.d, -weekday(block.d))}`}>Veckan</Link>
+                <Link className="text-sm text-muted hover:underline" href={`/dagsblad?datum=${block.d}`}>Dagsblad</Link>
               </div>
               {block.list.length === 0 ? (
                 <p className="text-sm text-muted">Inga bokningar.</p>

@@ -11,6 +11,7 @@ import type { Booking, BookingConflict, EventRow } from "@/lib/types";
 import { BookingFields } from "@/components/booking-fields";
 import { ConfirmButton } from "@/components/confirm-button";
 import { EventFields } from "@/components/event-fields";
+import { History } from "@/components/history";
 import { StatusPill } from "@/components/status-pill";
 import {
   addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, updateBooking, updateEvent,
@@ -250,6 +251,8 @@ export default async function EventPage({
         <EventFields event={ev} lookups={lookups} disabled={!booker} />
         {booker && <div><button className="btn btn-primary" type="submit">Spara ändringar</button></div>}
       </form>
+
+      <History eventId={id} />
 
       {booker && (
         <div className="grid gap-3 sm:grid-cols-2">

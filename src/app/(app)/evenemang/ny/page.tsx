@@ -11,7 +11,7 @@ export const metadata = { title: "Nytt evenemang" };
 export default async function NewEventPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lokal?: string; datum?: string; fel?: string }>;
+  searchParams: Promise<{ lokal?: string; datum?: string; fran?: string; till?: string; fel?: string }>;
 }) {
   const profile = await requireProfile();
   if (!canBook(profile)) redirect("/evenemang");
@@ -35,7 +35,13 @@ export default async function NewEventPage({
           <h2 className="text-lg font-semibold">Första bokningen</h2>
           <p className="text-sm text-muted">Valfritt. Du kan lägga till fler lokaler och tider efter att evenemanget är sparat.</p>
         </div>
-        <BookingFields lookups={lookups} defaultRoom={sp.lokal} defaultDate={sp.datum} />
+        <BookingFields
+          lookups={lookups}
+          defaultRoom={sp.lokal}
+          defaultDate={sp.datum}
+          defaultFrom={/^\d{2}:\d{2}$/.test(sp.fran ?? "") ? sp.fran : undefined}
+          defaultTo={/^\d{2}:\d{2}$/.test(sp.till ?? "") ? sp.till : undefined}
+        />
       </section>
 
       <div className="flex gap-3">

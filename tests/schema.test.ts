@@ -218,3 +218,43 @@ describe("offerter", () => {
     });
   });
 });
+
+describe("historik och kalender", () => {
+  it("loggar ändrade fält med vem som ändrade", async () => {
+    let id = "";
+    await asUser(ADMIN, async () => {
+      const e = await db.query<{ id: string }>("insert into events (title) values ('Loggtest') returning id");
+      id = e.rows[0].id;
+      await db.query("update events set status = 'preliminar', updated_at = now() where id = $1", [id]);
+      await db.query("update events set updated_at = now() where id = $1", [id]); // ingen riktig ändring
+    });
+    const r = await db.query<{ action: string; user_id: string; changes: Record<string, unknown> | null }>(
+      "select action, user_id, changes from audit_log where event_id = $1 order by id",
+      [id],
+    );
+    expect(r.rows.map((x) => x.action)).toEqual(["skapad", "andrad"]);
+    expect(r.rows[1].user_id).toBe(ADMIN);
+    expect(Object.keys(r.rows[1].changes!)).toEqual(["status"]);
+  });
+
+  it("kalenderlänken visar bokningar för aktiva användare och inget för fel länk", async () => {
+    await book("Kalendertest", "bekraftad", "Birka", new Date(Date.now() + 864e5).toISOString(), new Date(Date.now() + 2 * 864e5).toISOString());
+    const t = await db.query<{ token: string }>(
+      `insert into calendar_tokens (user_id) values ('${LASARE}') returning token`,
+    );
+    const token = t.rows[0].token;
+    await db.exec("grant usage on schema public to anon; set role anon;");
+    try {
+      const ok = await db.query<{ title: string }>("select title from calendar_feed($1)", [token]);
+      expect(ok.rows.map((x) => x.title)).toContain("Kalendertest");
+      const bad = await db.query("select * from calendar_feed('00000000-0000-0000-0000-000000000000')");
+      expect(bad.rows).toHaveLength(0);
+    } finally {
+      await db.exec("reset role;");
+    }
+    await db.query(`update profiles set active = false where id = '${LASARE}'`);
+    const off = await db.query("select * from calendar_feed($1)", [token]);
+    expect(off.rows).toHaveLength(0);
+    await db.query(`update profiles set active = true where id = '${LASARE}'`);
+  });
+});

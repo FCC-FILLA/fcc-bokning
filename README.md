@@ -11,6 +11,12 @@ Internt bokningssystem för Filadelfia Convention Center: lokaler, kunder, evene
 - **Evenemang:** status (förfrågan, preliminär med optionsdatum, bekräftad, genomförd, avbokad), kund, kontakt, ansvarig, deltagare, teknik, hospitality och interna anteckningar.
 - **Bokningar:** ett evenemang kan ha många bokningar (lokal + tid). Återkommande bokningar skapas veckovis.
 - **Krockkontroll:** lokalerna ligger i ett träd. Bokas *Stora salen, hela* blockeras Parkett, Läktare och Balkong, och tvärtom. Krockar visas i schemat, på evenemanget och under *Krockar*.
+- **Hitta ledig lokal** (`/ledigt`): lediga salar för datum, tid, antal dagar, gäster och möblering, med bokningsknapp.
+- **Dagsblad** (`/dagsblad`): utskriftsvänlig dagsöversikt för produktion och värdar.
+- **Sök** i menyn: evenemang, offerter (även offertnummer), kunder och kontaktpersoner.
+- **Historik** på evenemang och offerter: vem som ändrade vad och när (databastriggers i `audit_log`).
+- **Kalenderprenumeration** (`/konto`): personlig iCal-länk för Outlook, Google och iPhone. Slutar fungera om användaren stängs av.
+- **Användare** (`/anvandare`, admin): roller, namn och aktiv/avstängd.
 - **Kunder** med kontaktpersoner.
 - **Lokaler** med kapacitet per möblering.
 - **Roller:** Admin, Bokare, Produktion och Läsbehörighet. Admin och bokare ändrar bokningar, övriga läser. Reglerna ligger i databasen (Row Level Security), inte bara i gränssnittet.
@@ -76,7 +82,7 @@ tests/                 tester
 ## Nästa steg
 
 1. Import från ShowWizrd som testdata.
-2. Användarsida för att bjuda in kollegor och ändra roller.
+2. Bjuda in användare direkt från appen (kräver en hemlig servernyckel i Vercel).
 3. Utskick av offert via e-post direkt från appen (kräver egen SMTP).
 4. Kopplingar: ekonomisystem, Ticketmaster, förfrågningar från hemsidan, kalenderprenumeration.
 

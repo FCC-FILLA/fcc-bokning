@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Article, ArticleGroup, Quote, QuoteLine } from "@/lib/types";
 import { ConfirmButton } from "@/components/confirm-button";
 import { CopyButton } from "@/components/copy-button";
+import { History } from "@/components/history";
 import { QuoteEditor } from "@/components/quote-editor";
 import {
   addBookingLines, backToDraft, confirmEvent, deleteQuote, duplicateQuote, markSent, registerAnswer, saveLines, updateQuote,
@@ -235,6 +236,8 @@ export default async function QuotePage({
         </fieldset>
         {!locked && <div><button className="btn btn-primary" type="submit">Spara uppgifter</button></div>}
       </form>
+
+      <History quoteId={id} />
 
       {booker && (
         <div className="flex flex-wrap items-center gap-3">

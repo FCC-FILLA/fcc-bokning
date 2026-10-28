@@ -7,12 +7,12 @@ type SetupOption = { id: string; name: string };
 type Row = { key: number; room_id: string; date: string; from: string; to: string; setup_id: string; note: string };
 
 let nextKey = 1;
-const blank = (date = "", room_id = ""): Row => ({
+const blank = (date = "", room_id = "", from = "08:00", to = "17:00"): Row => ({
   key: nextKey++,
   room_id,
   date,
-  from: "08:00",
-  to: "17:00",
+  from,
+  to,
   setup_id: "",
   note: "",
 });
@@ -26,13 +26,17 @@ export function BookingRows({
   setups,
   defaultRoom,
   defaultDate,
+  defaultFrom,
+  defaultTo,
 }: {
   rooms: RoomOption[];
   setups: SetupOption[];
   defaultRoom?: string;
   defaultDate?: string;
+  defaultFrom?: string;
+  defaultTo?: string;
 }) {
-  const [rows, setRows] = useState<Row[]>(() => [blank(defaultDate ?? "", defaultRoom ?? "")]);
+  const [rows, setRows] = useState<Row[]>(() => [blank(defaultDate ?? "", defaultRoom ?? "", defaultFrom, defaultTo)]);
   const [repeat, setRepeat] = useState(1);
 
   const update = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
