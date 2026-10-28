@@ -22,9 +22,7 @@ Internt bokningssystem för Filadelfia Convention Center: lokaler, kunder, evene
 2. Kör migrationerna i `supabase/migrations/` i ordning. Antingen i SQL Editor (klistra in filerna en i taget) eller med Supabase CLI: `supabase link` och sedan `supabase db push`.
 3. **Authentication → Sign In / Providers:** stäng av *Allow new users to sign up*. Konton skapas bara via inbjudan.
 4. **Authentication → URL Configuration:** sätt *Site URL* till appens adress (t.ex. `https://bokning.filadelfiacc.se`).
-5. **Authentication → Email Templates:** ändra länken i två mallar så att de går via appen:
-   - *Invite user*: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/konto/losenord`
-   - *Reset password*: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/konto/losenord`
+5. **Inbjudningar och lösenordsåterställning** fungerar med Supabase standardmejl: länken går till Site URL och appen tar emot den på inloggningssidan och skickar användaren vidare för att välja lösenord. Med egen SMTP kan mallarna i stället peka på `/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/konto/losenord` (och `type=recovery` för återställning).
 6. **Bjud in dig själv:** Authentication → Users → *Invite user*. Gör dig sedan till admin i SQL Editor:
    ```sql
    update profiles set role = 'admin', full_name = 'Ditt namn' where email = 'din@epost.se';

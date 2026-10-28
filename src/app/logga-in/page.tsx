@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { LinkSession } from "@/components/link-session";
 
 export const metadata = { title: "Logga in" };
 
@@ -23,6 +24,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="label">Filadelfia Convention Center</p>
           <h1 className="text-3xl font-semibold text-brand">Bokning</h1>
         </div>
+        <LinkSession />
         <form action={signIn} className="card p-6 grid gap-4">
           <div className="field">
             <label className="label" htmlFor="email">E-post</label>
