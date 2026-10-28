@@ -80,7 +80,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
         <Link className="text-sm text-muted underline-offset-2 hover:underline" href={`/manad?m=${ym}${showCancelled ? "" : "&avbokade=1"}`}>
           {showCancelled ? "Dölj avbokade" : "Visa avbokade"}
         </Link>
-        <Link className="btn" href={`/?vecka=${mondayOf(ym === today.slice(0, 7) ? today : first)}`}>Veckovy</Link>
+        <Link className="btn" href={`/vecka?vecka=${mondayOf(ym === today.slice(0, 7) ? today : first)}`}>Veckovy</Link>
         {canBook(profile) && <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>}
       </div>
 
@@ -97,7 +97,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
               <div key={d} className="contents">
                 {i % 7 === 0 && (
                   <Link
-                    href={`/?vecka=${d}`}
+                    href={`/vecka?vecka=${d}`}
                     className="border-b border-line px-1 py-2 text-center text-xs text-muted font-mono hover:text-brand"
                     title="Öppna veckan"
                   >
@@ -110,7 +110,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
                   }`}
                 >
                   <Link
-                    href={`/?vecka=${mondayOf(d)}`}
+                    href={`/vecka?vecka=${mondayOf(d)}`}
                     className={`justify-self-start text-sm font-display font-semibold px-1 rounded hover:bg-sunk ${
                       d === today ? "text-brand" : inMonth ? "" : "text-muted"
                     }`}
@@ -130,7 +130,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
                     </Link>
                   ))}
                   {list.length > MAX && (
-                    <Link href={`/?vecka=${mondayOf(d)}`} className="text-xs text-muted hover:underline px-1">
+                    <Link href={`/vecka?vecka=${mondayOf(d)}`} className="text-xs text-muted hover:underline px-1">
                       +{list.length - MAX} till
                     </Link>
                   )}

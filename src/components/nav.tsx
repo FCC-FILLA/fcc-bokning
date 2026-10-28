@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const ITEMS = [
-  { href: "/", label: "Vecka" },
+  { href: "/", label: "Översikt" },
+  { href: "/vecka", label: "Vecka" },
   { href: "/manad", label: "Månad" },
   { href: "/evenemang", label: "Evenemang" },
   { href: "/offerter", label: "Offerter" },

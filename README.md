@@ -6,7 +6,8 @@ Internt bokningssystem för Filadelfia Convention Center: lokaler, kunder, evene
 
 ## Det som finns i fas 1
 
-- **Schema:** vecka för vecka, en rad per lokal. Klicka i en tom ruta för att boka.
+- **Översikt** (startsidan): idag och i morgon, sådant som kräver åtgärd, beläggning två veckor framåt, offerter som väntar på svar och senaste ändringar.
+- **Vecka och månad:** vecka för vecka med en rad per lokal (klicka i en tom ruta för att boka), och en månadsvy.
 - **Evenemang:** status (förfrågan, preliminär med optionsdatum, bekräftad, genomförd, avbokad), kund, kontakt, ansvarig, deltagare, teknik, hospitality och interna anteckningar.
 - **Bokningar:** ett evenemang kan ha många bokningar (lokal + tid). Återkommande bokningar skapas veckovis.
 - **Krockkontroll:** lokalerna ligger i ett träd. Bokas *Stora salen, hela* blockeras Parkett, Läktare och Balkong, och tvärtom. Krockar visas i schemat, på evenemanget och under *Krockar*.
