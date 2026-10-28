@@ -1,26 +1,82 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* FCC:s profilfärg är #60272B. Neutralerna drar svagt mot den. */
+@theme {
+  --color-brand: #60272b;
+  --color-brand-dark: #4a1d20;
+  --color-brand-soft: #f3e1e2;
+  --color-bg: #faf7f6;
+  --color-surface: #ffffff;
+  --color-sunk: #f2ecea;
+  --color-line: #e4d9d7;
+  --color-fg: #2a1c1d;
+  --color-muted: #7a6466;
+  --color-today: #fbeeea;
+  --color-warn: #b3261e;
+  --color-warn-soft: #fdeceb;
+  --color-ok: #2f6b45;
+
+  --color-st-forfragan: #4f6d8a;
+  --color-st-forfragan-soft: #e7eef5;
+  --color-st-preliminar: #9a6a12;
+  --color-st-preliminar-soft: #fbf0d9;
+  --color-st-bekraftad: #60272b;
+  --color-st-bekraftad-soft: #f3e1e2;
+  --color-st-genomford: #2f6b45;
+  --color-st-genomford-soft: #e4f1e8;
+  --color-st-avbokad: #8d8283;
+  --color-st-avbokad-soft: #efebea;
+
+  --font-display: "Jost Variable", "Futura", "Century Gothic", system-ui, sans-serif;
+  --font-sans: "Source Sans 3 Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html { color-scheme: light; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
 }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; }
+
+@layer components {
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: 8px; padding: 7px 14px; font-weight: 600; font-size: 0.9rem;
+    border: 1px solid var(--color-line); background: var(--color-surface); color: var(--color-fg);
+    cursor: pointer; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--color-muted); }
+  .btn-primary { background: var(--color-brand); border-color: var(--color-brand); color: #fff; }
+  .btn-primary:hover { background: var(--color-brand-dark); border-color: var(--color-brand-dark); }
+  .btn-danger { color: var(--color-warn); border-color: var(--color-warn); background: transparent; }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .field { display: grid; gap: 4px; min-width: 0; }
+  .label { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted); }
+  .input {
+    width: 100%; min-width: 0; padding: 7px 10px; border-radius: 7px;
+    border: 1px solid var(--color-line); background: var(--color-surface); color: var(--color-fg); font: inherit;
+  }
+  textarea.input { min-height: 84px; resize: vertical; }
+
+  .card { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 12px; }
+
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+  .st-forfragan { background: var(--color-st-forfragan-soft); color: var(--color-st-forfragan); border-color: var(--color-st-forfragan); }
+  .st-preliminar { background: var(--color-st-preliminar-soft); color: var(--color-st-preliminar); border-color: var(--color-st-preliminar); }
+  .st-bekraftad { background: var(--color-st-bekraftad-soft); color: var(--color-st-bekraftad); border-color: var(--color-st-bekraftad); }
+  .st-genomford { background: var(--color-st-genomford-soft); color: var(--color-st-genomford); border-color: var(--color-st-genomford); }
+  .st-avbokad { background: var(--color-st-avbokad-soft); color: var(--color-st-avbokad); border-color: var(--color-st-avbokad); text-decoration: line-through; }
+
+  .table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .table th { text-align: left; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-muted); padding: 10px 12px; border-bottom: 1px solid var(--color-line); }
+  .table td { padding: 10px 12px; border-bottom: 1px solid var(--color-line); vertical-align: top; }
+  .table tr:last-child td { border-bottom: 0; }
+}
+
+:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }

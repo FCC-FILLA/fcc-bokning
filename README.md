@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FCC Bokning
 
-## Getting Started
+Internt bokningssystem för Filadelfia Convention Center: lokaler, kunder, evenemang, bokningar per lokal och tidslucka, och krockkontroll.
 
-First, run the development server:
+**Teknik:** Next.js 16 (App Router), Supabase (Postgres, inloggning, behörigheter), Tailwind CSS. Körs på Vercel.
+
+## Det som finns i fas 1
+
+- **Schema:** vecka för vecka, en rad per lokal. Klicka i en tom ruta för att boka.
+- **Evenemang:** status (förfrågan, preliminär med optionsdatum, bekräftad, genomförd, avbokad), kund, kontakt, ansvarig, deltagare, teknik, hospitality och interna anteckningar.
+- **Bokningar:** ett evenemang kan ha många bokningar (lokal + tid). Återkommande bokningar skapas veckovis.
+- **Krockkontroll:** lokalerna ligger i ett träd. Bokas *Stora salen, hela* blockeras Parkett, Läktare och Balkong, och tvärtom. Krockar visas i schemat, på evenemanget och under *Krockar*.
+- **Kunder** med kontaktpersoner.
+- **Lokaler** med kapacitet per möblering.
+- **Roller:** Admin, Bokare, Produktion och Läsbehörighet. Admin och bokare ändrar bokningar, övriga läser. Reglerna ligger i databasen (Row Level Security), inte bara i gränssnittet.
+
+## Kom igång
+
+### 1. Supabase
+
+1. Skapa ett projekt på [supabase.com](https://supabase.com) i region **EU (Stockholm eller Frankfurt)**.
+2. Kör migrationerna i `supabase/migrations/` i ordning. Antingen i SQL Editor (klistra in filerna en i taget) eller med Supabase CLI: `supabase link` och sedan `supabase db push`.
+3. **Authentication → Sign In / Providers:** stäng av *Allow new users to sign up*. Konton skapas bara via inbjudan.
+4. **Authentication → URL Configuration:** sätt *Site URL* till appens adress (t.ex. `https://bokning.filadelfiacc.se`).
+5. **Authentication → Email Templates:** ändra länken i två mallar så att de går via appen:
+   - *Invite user*: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/konto/losenord`
+   - *Reset password*: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/konto/losenord`
+6. **Bjud in dig själv:** Authentication → Users → *Invite user*. Gör dig sedan till admin i SQL Editor:
+   ```sql
+   update profiles set role = 'admin', full_name = 'Ditt namn' where email = 'din@epost.se';
+   ```
+   Övriga användare får rollen `lasare` tills en admin ändrar den (`bokare`, `produktion` eller `admin`).
+
+För fler än ett par inbjudningar i timmen behövs egen e-postserver (SMTP) under Authentication → Emails.
+
+### 2. Lokalt
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # fyll i URL och publishable key
+npm install
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Vercel
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Importera GitHub-repot på [vercel.com](https://vercel.com), lägg in samma två miljövariabler och publicera. Varje ändring på `main` publiceras automatiskt.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Utveckling
 
-## Learn More
+```bash
+npm test          # databasschema och krocklogik testas mot en Postgres i minnet
+npm run lint
+npm run typecheck
+```
 
-To learn more about Next.js, take a look at the following resources:
+Databasändringar görs alltid som en ny fil i `supabase/migrations/`, aldrig genom att ändra en befintlig migration som redan körts i produktion.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Struktur
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+supabase/migrations/   databasschema och grunddata (lokaler, kapacitet)
+src/app/(app)/         inloggade sidor: schema, evenemang, kunder, lokaler, krockar
+src/app/logga-in/      inloggning
+src/app/auth/confirm/  tar emot länkar från inbjudnings- och återställningsmejl
+src/lib/               Supabase-klient, datum i svensk tid, behörigheter, typer
+src/components/        formulär och gemensamma komponenter
+tests/                 tester
+```
 
-## Deploy on Vercel
+## Nästa faser
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2. Offert med prislista, PDF och godkännande via länk.
+3. Crew, städ och stagehand.
+4. Kopplingar: ekonomisystem, Ticketmaster, förfrågningar från hemsidan, kalenderprenumeration.
