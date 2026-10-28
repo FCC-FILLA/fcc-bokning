@@ -65,8 +65,11 @@ src/components/        formulär och gemensamma komponenter
 tests/                 tester
 ```
 
-## Nästa faser
+## Nästa steg
 
+1. Smidigare bokningar: ändra tidsluckor, lägga till flera tider på en gång, kopiera dagar och evenemang, månadsvy.
 2. Offert med prislista, PDF och godkännande via länk.
-3. Crew, städ och stagehand.
+3. Import från ShowWizrd.
 4. Kopplingar: ekonomisystem, Ticketmaster, förfrågningar från hemsidan, kalenderprenumeration.
+
+Personal/crew och CRM (affärer, säljpipeline) ingår inte för tillfället. Kundregistret finns kvar eftersom bokningar och offerter behöver det.
