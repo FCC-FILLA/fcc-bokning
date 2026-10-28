@@ -13,6 +13,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { EventFields } from "@/components/event-fields";
 import { History } from "@/components/history";
 import { StatusPill } from "@/components/status-pill";
+import { saveEventAsTemplate } from "../../mallar/actions";
 import {
   addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, updateBooking, updateEvent,
 } from "../actions";
@@ -24,7 +25,7 @@ export default async function EventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -86,6 +87,7 @@ export default async function EventPage({
       {sp.sparat && <Ok>Evenemanget är sparat.</Ok>}
       {sp.andrat && <Ok>Bokningen är ändrad.</Ok>}
       {sp.kopierad && <Ok>Kopian är skapad med status Förfrågan. Byt gärna namn och kontrollera tiderna.</Ok>}
+      {sp.franmall && <Ok>Evenemanget är skapat från mallen. Kontrollera krockar, kund och tider.</Ok>}
       {sp.tillagt && <Ok>{sp.tillagt} bokning{sp.tillagt === "1" ? "" : "ar"} har lagts till.</Ok>}
       {upcomingConflicts.length > 0 && (
         <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
@@ -255,13 +257,21 @@ export default async function EventPage({
       <History eventId={id} />
 
       {booker && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <form action={duplicateEvent.bind(null, id)} className="card p-4 grid gap-2">
             <h2 className="font-semibold">Kopiera evenemanget</h2>
             <p className="text-sm text-muted">Skapar ett nytt evenemang med samma uppgifter och lokaler, flyttat så att det börjar på datumet du väljer.</p>
             <div className="flex flex-wrap items-center gap-2">
               <input className="input w-44" name="new_start" type="date" required aria-label="Nytt startdatum" defaultValue={firstDate ? addDays(firstDate, 7) : ""} />
               <button className="btn" type="submit">Skapa kopia</button>
+            </div>
+          </form>
+          <form action={saveEventAsTemplate.bind(null, id)} className="card p-4 grid gap-2">
+            <h2 className="font-semibold">Spara som mall</h2>
+            <p className="text-sm text-muted">Lokaler och tider sparas dag för dag, tillsammans med raderna från den senaste offerten.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input className="input grow min-w-44" name="name" required aria-label="Mallens namn" defaultValue={ev.title} />
+              <button className="btn" type="submit">Spara mall</button>
             </div>
           </form>
           <form action={deleteEvent.bind(null, id)} className="card p-4 grid gap-2 content-start">

@@ -42,11 +42,15 @@ export function QuoteEditor({
   articles,
   initial,
   readOnly,
+  submitLabel = "Spara rader",
+  hideDates = false,
 }: {
   groups: EditorGroup[];
   articles: EditorArticle[];
   initial: Omit<EditorLine, "key">[];
   readOnly: boolean;
+  submitLabel?: string;
+  hideDates?: boolean;
 }) {
   const [lines, setLines] = useState<EditorLine[]>(() => initial.map((l) => ({ ...l, key: newKey() })));
   const [dirty, setDirty] = useState(false);
@@ -126,7 +130,7 @@ export function QuoteEditor({
                 <thead>
                   <tr className="text-left text-muted">
                     <th className="label font-semibold">Beskrivning</th>
-                    <th className="label font-semibold w-[132px]">Datum</th>
+                    {!hideDates && <th className="label font-semibold w-[132px]">Datum</th>}
                     <th className="label font-semibold w-[72px] text-right">Antal</th>
                     <th className="label font-semibold w-[76px]">Enhet</th>
                     <th className="label font-semibold w-[104px] text-right">À-pris</th>
@@ -143,9 +147,11 @@ export function QuoteEditor({
                       <td className="pr-1">
                         <input className="input" value={l.description} disabled={readOnly} aria-label="Beskrivning" onChange={(e) => update(l.key, { description: e.target.value })} />
                       </td>
-                      <td className="pr-1">
-                        <input className="input" type="date" value={l.line_date} disabled={readOnly} aria-label="Datum" onChange={(e) => update(l.key, { line_date: e.target.value })} />
-                      </td>
+                      {!hideDates && (
+                        <td className="pr-1">
+                          <input className="input" type="date" value={l.line_date} disabled={readOnly} aria-label="Datum" onChange={(e) => update(l.key, { line_date: e.target.value })} />
+                        </td>
+                      )}
                       <td className="pr-1">
                         <input className="input text-right" inputMode="decimal" defaultValue={l.quantity} disabled={readOnly} aria-label="Antal" onBlur={(e) => update(l.key, { quantity: num(e.target.value) })} />
                       </td>
@@ -283,7 +289,7 @@ export function QuoteEditor({
 
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-3 sticky bottom-0 bg-surface py-3 border-t border-line">
-          <button className="btn btn-primary" type="submit">Spara rader</button>
+          <button className="btn btn-primary" type="submit">{submitLabel}</button>
           {dirty && <span className="text-sm text-st-preliminar">Du har ändringar som inte är sparade.</span>}
         </div>
       )}

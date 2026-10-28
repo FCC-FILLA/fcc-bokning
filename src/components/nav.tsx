@@ -11,6 +11,7 @@ const ITEMS = [
   { href: "/ledigt", label: "Ledig lokal" },
   { href: "/evenemang", label: "Evenemang" },
   { href: "/offerter", label: "Offerter" },
+  { href: "/mallar", label: "Mallar" },
   { href: "/kunder", label: "Kunder" },
   { href: "/lokaler", label: "Lokaler" },
   { href: "/prislista", label: "Prislista" },

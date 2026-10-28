@@ -1,4 +1,5 @@
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+/* eslint-disable jsx-a11y/alt-text -- react-pdf:s Image har ingen alt-text */
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { fmtDate, fmtRange } from "@/lib/datum";
 import { fmtKr, lineTotal, quoteTotals } from "@/lib/offert";
 import { groupLines, type QuoteDoc } from "@/lib/offert-doc";
@@ -35,12 +36,21 @@ const s = StyleSheet.create({
   sumVal: { width: 90, textAlign: "right" },
   total: { fontFamily: "Helvetica-Bold", fontSize: 11 },
   terms: { fontSize: 8, color: "#4a3a3b", marginTop: 4 },
+  hero: { height: 150, marginHorizontal: -44, marginBottom: 18, objectFit: "cover" },
+  roomCard: { flexDirection: "row", gap: 10, paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: LINE },
+  roomImg: { width: 96, height: 64, objectFit: "cover", borderRadius: 2 },
+  roomName: { fontFamily: "Helvetica-Bold", fontSize: 10 },
+  roomFacts: { fontSize: 8, color: MUTED, marginBottom: 2 },
   footerLeft: { position: "absolute", bottom: 24, left: 44, fontSize: 7.5, color: MUTED },
 });
 
 const shortDate = (d: string | null) => (d ? `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}` : "");
 
-function QuotePdf({ doc }: { doc: QuoteDoc }) {
+/** Bilder hämtade i förväg, nyckel = sökväg som i doc.rooms[].image. */
+export type PdfImages = Map<string, Buffer>;
+
+function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
+  const cover = doc.rooms.map((r) => r.image).find((i): i is string => !!i && images.has(i));
   const t = quoteTotals(doc.lines);
   const included = groupLines(doc.lines.filter((l) => l.kind === "ingar"));
   const addons = doc.lines.filter((l) => l.kind === "tillval");
@@ -82,6 +92,8 @@ function QuotePdf({ doc }: { doc: QuoteDoc }) {
           </View>
         </View>
 
+        {cover && <Image style={s.hero} src={images.get(cover)!} />}
+
         <Text style={s.title}>{doc.title}</Text>
         <View style={s.infoRow}>
           <View style={s.infoCol}>
@@ -97,6 +109,22 @@ function QuotePdf({ doc }: { doc: QuoteDoc }) {
         </View>
 
         {doc.intro && <Text style={s.para}>{doc.intro}</Text>}
+
+        {doc.rooms.length > 0 && (
+          <View style={{ marginBottom: 8 }}>
+            <Text style={s.h2}>Era lokaler</Text>
+            {doc.rooms.map((r, i) => (
+              <View style={s.roomCard} key={i} wrap={false}>
+                {r.image && images.has(r.image) && <Image style={s.roomImg} src={images.get(r.image)!} />}
+                <View style={{ flexGrow: 1, flexBasis: 0 }}>
+                  <Text style={s.roomName}>{r.name}</Text>
+                  <Text style={s.roomFacts}>{[r.kvm ? `${r.kvm} kvm` : null, r.max ? `upp till ${r.max} personer` : null].filter(Boolean).join(" · ")}</Text>
+                  {r.text && <Text style={{ fontSize: 8.5 }}>{r.text}</Text>}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {doc.bookings.length > 0 && (
           <View style={{ marginBottom: 8 }}>
@@ -162,8 +190,25 @@ function QuotePdf({ doc }: { doc: QuoteDoc }) {
   );
 }
 
-export async function renderQuotePdf(doc: QuoteDoc) {
-  return renderToBuffer(<QuotePdf doc={doc} />);
+export async function renderQuotePdf(doc: QuoteDoc, images: PdfImages = new Map()) {
+  return renderToBuffer(<QuotePdf doc={doc} images={images} />);
+}
+
+/** Hämtar lokalbilderna (från /lokaler/…) via sajtens egen adress. Misslyckas en bild hoppar vi bara över den. */
+export async function fetchPdfImages(doc: QuoteDoc, origin: string): Promise<PdfImages> {
+  const paths = [...new Set(doc.rooms.map((r) => r.image).filter((p): p is string => !!p && p.startsWith("/lokaler/")))].slice(0, 8);
+  const out: PdfImages = new Map();
+  await Promise.all(
+    paths.map(async (p) => {
+      try {
+        const res = await fetch(new URL(p, origin), { signal: AbortSignal.timeout(4000) });
+        if (res.ok) out.set(p, Buffer.from(await res.arrayBuffer()));
+      } catch {
+        /* utan bild */
+      }
+    }),
+  );
+  return out;
 }
 
 export function pdfFileName(doc: QuoteDoc) {

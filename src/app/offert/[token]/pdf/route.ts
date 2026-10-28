@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { loadPublicDoc } from "@/lib/offert-doc";
-import { pdfFileName, renderQuotePdf } from "@/lib/pdf/quote-pdf";
+import { fetchPdfImages, pdfFileName, renderQuotePdf } from "@/lib/pdf/quote-pdf";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
 // PDF för kunden via delningslänken.
-export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const doc = await loadPublicDoc(await createClient(), token);
   if (!doc) return new NextResponse("Offerten finns inte eller är inte längre tillgänglig.", { status: 404 });
-  const pdf = await renderQuotePdf(doc);
+  const pdf = await renderQuotePdf(doc, await fetchPdfImages(doc, new URL(req.url).origin));
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",

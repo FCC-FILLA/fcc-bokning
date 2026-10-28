@@ -258,3 +258,24 @@ describe("historik och kalender", () => {
     await db.query(`update profiles set active = true where id = '${LASARE}'`);
   });
 });
+
+describe("kundens offert med lokalbilder", () => {
+  it("skickar med bokade lokaler, bild och kapacitet en gång per lokal", async () => {
+    const ev = await book("Bildtest", "preliminar", "Rörstrand 1", "2027-05-01T08:00+02", "2027-05-01T17:00+02");
+    await db.query(
+      "insert into bookings (event_id, room_id, starts_at, ends_at) values ($1, (select id from rooms where name='Rörstrand 1'), '2027-05-02T08:00+02', '2027-05-02T17:00+02')",
+      [ev],
+    );
+    const q = await db.query<{ share_token: string }>(
+      "insert into quotes (title, status, event_id) values ('Bild', 'skickad', $1) returning share_token",
+      [ev],
+    );
+    const r = await db.query<{ q: { rooms: { name: string; image: string; max: number }[]; bookings: unknown[] } }>(
+      "select public_quote($1) as q",
+      [q.rows[0].share_token],
+    );
+    expect(r.rows[0].q.bookings).toHaveLength(2);
+    expect(r.rows[0].q.rooms).toHaveLength(1);
+    expect(r.rows[0].q.rooms[0]).toMatchObject({ name: "Rörstrand 1", image: "/lokaler/rorstrand-1.jpg", max: 150 });
+  });
+});

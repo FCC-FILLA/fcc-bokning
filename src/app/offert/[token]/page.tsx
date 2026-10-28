@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
-import { fmtDate, fmtRange } from "@/lib/datum";
+import { dayLong, fmtDate, fmtDayMonth, fmtTime, isoToDate } from "@/lib/datum";
 import { fmtKr, lineTotal, quoteTotals } from "@/lib/offert";
-import { groupLines, loadPublicDoc } from "@/lib/offert-doc";
+import { groupLines, loadPublicDoc, type QuoteDoc } from "@/lib/offert-doc";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Offert", robots: { index: false, follow: false } };
@@ -32,6 +33,27 @@ const MESSAGES: Record<string, { ok: boolean; text: string }> = {
   fel: { ok: false, text: "Något gick fel. Försök igen eller kontakta oss." },
 };
 
+/** Bokningarna dag för dag: [{ date, slots: [{ room, from, to }] }]. */
+function schedule(bookings: QuoteDoc["bookings"]) {
+  const days = new Map<string, { room: string; time: string }[]>();
+  for (const b of bookings) {
+    const d = isoToDate(b.starts_at);
+    const ed = isoToDate(b.ends_at);
+    const end = fmtTime(b.ends_at) === "00:00" ? "24:00" : fmtTime(b.ends_at);
+    const time = ed === d || end === "24:00" ? `${fmtTime(b.starts_at)}–${end}` : `${fmtTime(b.starts_at)} – ${fmtDayMonth(ed)} ${end}`;
+    days.set(d, [...(days.get(d) ?? []), { room: b.room, time }]);
+  }
+  return [...days].sort(([a], [b]) => a.localeCompare(b));
+}
+
+function period(bookings: QuoteDoc["bookings"]) {
+  if (!bookings.length) return null;
+  const first = isoToDate(bookings[0].starts_at);
+  const last = isoToDate(bookings.at(-1)!.starts_at);
+  if (first === last) return fmtDate(first);
+  return first.slice(0, 4) === last.slice(0, 4) ? `${fmtDayMonth(first)} – ${fmtDayMonth(last)} ${last.slice(0, 4)}` : `${fmtDate(first)} – ${fmtDate(last)}`;
+}
+
 export default async function PublicQuotePage({
   params,
   searchParams,
@@ -50,170 +72,249 @@ export default async function PublicQuotePage({
   const msg = svar ? MESSAGES[svar] : null;
   const today = new Date().toISOString().slice(0, 10);
   const expired = doc.valid_until != null && doc.valid_until < today;
+  const open = doc.status === "skickad" && !expired;
+  const cover = doc.rooms.find((r) => r.image)?.image ?? "/lokaler/stora-salen.jpg";
+  const days = schedule(doc.bookings);
+  const when = period(doc.bookings);
+  const roomTimes = new Map<string, number>();
+  for (const b of doc.bookings) roomTimes.set(b.room, (roomTimes.get(b.room) ?? 0) + 1);
 
   return (
     <div className="min-h-dvh bg-bg">
-      <header className="bg-brand text-white">
-        <div className="mx-auto max-w-4xl px-4 py-5 flex flex-wrap items-end gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] opacity-80">Filadelfia Convention Center</p>
-            <p className="font-display text-3xl font-semibold">Offert</p>
+      {/* Hero */}
+      <header className="relative isolate overflow-hidden bg-brand-dark text-white">
+        <Image src={cover} alt="" fill priority sizes="100vw" className="object-cover -z-20" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#2a1012] via-[#2a1012]/70 to-[#2a1012]/30" />
+        <div className="mx-auto max-w-5xl px-4 pt-6 pb-10 sm:pb-14 grid gap-16 sm:gap-24">
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <p className="font-display font-semibold tracking-[0.18em] uppercase text-xs sm:text-sm">Filadelfia Convention Center</p>
+            <p className="opacity-85 tabular-nums">Offert nr {doc.number}</p>
           </div>
-          <span className="flex-1" />
-          <div className="text-sm text-right opacity-90">
-            <p>Nr {doc.number}</p>
-            {doc.valid_until && <p>Giltig till {fmtDate(doc.valid_until)}</p>}
+          <div className="grid gap-4 max-w-3xl">
+            {doc.company_name && <p className="text-sm uppercase tracking-[0.18em] opacity-85">Till {doc.company_name}</p>}
+            <h1 className="font-display text-3xl sm:text-5xl font-semibold leading-tight text-balance">{doc.title}</h1>
+            <ul className="flex flex-wrap gap-2 text-sm">
+              {when && <Chip>{when}</Chip>}
+              {doc.participants ? <Chip>{doc.participants.toLocaleString("sv-SE")} deltagare</Chip> : null}
+              {doc.rooms.length > 0 && <Chip>{doc.rooms.length === 1 ? doc.rooms[0].name : `${doc.rooms.length} lokaler`}</Chip>}
+            </ul>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-8 grid gap-6">
-        <div className="grid gap-4 sm:grid-cols-[2fr_1fr] items-start">
-          <div className="grid gap-2 min-w-0">
-            <h1 className="text-2xl font-semibold">{doc.title}</h1>
-            {doc.company_name && (
-              <p className="text-muted">
-                Till {doc.company_name}
-                {doc.contact_name ? `, ${doc.contact_name}` : ""}
-              </p>
-            )}
-            {doc.intro && <p className="whitespace-pre-line max-w-prose">{doc.intro}</p>}
-          </div>
-          <div className="card p-4 grid gap-1 text-sm">
-            <span className="label">Er kontakt hos oss</span>
-            <span className="font-semibold">{doc.salesperson_name || "Filadelfia Convention Center"}</span>
-            {doc.salesperson_email && <span className="break-all">{doc.salesperson_email}</span>}
-            <a className="btn mt-2" href={`/offert/${token}/pdf`}>Ladda ner PDF</a>
-          </div>
-        </div>
-
-        {doc.status === "accepterad" && (
-          <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-ok">
-            Godkänd {doc.accepted_at ? fmtDate(doc.accepted_at) : ""}
-            {doc.accepted_name ? ` av ${doc.accepted_name}` : ""}. Tack!
-          </p>
-        )}
-        {doc.status === "avbojd" && <p className="rounded-lg bg-sunk px-4 py-3">Offerten är avböjd.</p>}
-
-        {doc.bookings.length > 0 && (
-          <section className="card p-5 grid gap-2">
-            <h2 className="text-lg font-semibold">Lokaler och tider</h2>
-            <ul className="grid gap-1 text-sm">
-              {doc.bookings.map((b, i) => (
-                <li key={i} className="flex flex-wrap gap-x-4 border-b border-line py-1.5 last:border-0">
-                  <span className="font-semibold w-48">{b.room}</span>
-                  <span>{fmtRange(b.starts_at, b.ends_at)}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section className="card p-5 grid gap-5">
-          {[...included].map(([group, lines]) => (
-            <div key={group} className="grid gap-1">
-              <h2 className="font-display font-semibold text-brand border-b border-brand/40 pb-1">{group}</h2>
-              <div className="overflow-x-auto">
-                <table className="table min-w-[560px]">
-                  <tbody>
-                    {lines.map((l, i) => (
-                      <tr key={i}>
-                        <td className="pl-0">
-                          {l.description}
-                          {l.line_date && <span className="block text-xs text-muted">{fmtDate(l.line_date)}</span>}
-                        </td>
-                        <td className="text-right whitespace-nowrap text-muted">
-                          {l.quantity.toLocaleString("sv-SE")} {l.unit} × {fmtKr(l.unit_price)}
-                        </td>
-                        <td className="text-right whitespace-nowrap text-muted">{l.discount_pct ? `−${l.discount_pct} %` : ""}</td>
-                        <td className="text-right whitespace-nowrap font-semibold pr-0">{fmtKr(lineTotal(l))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-
-          <dl className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1 justify-end text-sm tabular-nums">
-            {t.discount > 0 && (
-              <>
-                <dt className="text-muted text-right">Summa före rabatt</dt><dd className="text-right">{fmtKr(t.beforeDiscount)}</dd>
-                <dt className="text-muted text-right">Rabatt</dt><dd className="text-right">−{fmtKr(t.discount)}</dd>
-              </>
-            )}
-            <dt className="text-muted text-right">Summa exkl. moms</dt><dd className="text-right">{fmtKr(t.exVat)}</dd>
-            <dt className="text-muted text-right">Moms</dt><dd className="text-right">{fmtKr(t.vat)}</dd>
-            <dt className="text-right font-semibold border-t border-line pt-1">Att betala inkl. moms</dt>
-            <dd className="text-right font-display text-xl font-semibold text-brand border-t border-line pt-1">{fmtKr(t.inclVat)}</dd>
-          </dl>
-        </section>
-
-        {addons.length > 0 && (
-          <section className="card p-5 grid gap-2">
-            <h2 className="text-lg font-semibold">Möjliga tillval</h2>
-            <p className="text-sm text-muted">Ingår inte i summan ovan. Säg till om ni vill lägga till något.</p>
-            <ul className="grid gap-1 text-sm">
-              {addons.map((l, i) => (
-                <li key={i} className="flex flex-wrap gap-x-4 border-b border-line py-1.5 last:border-0">
-                  <span className="flex-1 min-w-0">{l.description}</span>
-                  <span className="text-muted">{l.quantity.toLocaleString("sv-SE")} {l.unit} × {fmtKr(l.unit_price)}</span>
-                  <span className="font-semibold w-28 text-right">{fmtKr(lineTotal(l))}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {doc.terms && (
-          <section className="grid gap-2">
-            <h2 className="text-lg font-semibold">Villkor</h2>
-            <p className="whitespace-pre-line text-sm text-muted max-w-prose">{doc.terms}</p>
-          </section>
-        )}
-
-        <section id="svara" className="scroll-mt-6 grid gap-3">
-          {msg && (
-            <p className={`rounded-lg px-4 py-3 ${msg.ok ? "bg-st-genomford-soft text-ok" : "bg-warn-soft text-warn"}`}>{msg.text}</p>
-          )}
-          {doc.status === "skickad" && !expired && (
-            <form action={respond.bind(null, token)} className="card p-5 grid gap-4">
-              <h2 className="text-lg font-semibold">Svara på offerten</h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="field">
-                  <label className="label" htmlFor="name">Ditt namn</label>
-                  <input className="input" id="name" name="name" autoComplete="name" required />
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="email">E-post</label>
-                  <input className="input" id="email" name="email" type="email" autoComplete="email" required />
-                </div>
-              </div>
-              <div className="field">
-                <label className="label" htmlFor="comment">Kommentar (valfritt)</label>
-                <textarea className="input" id="comment" name="comment" />
-              </div>
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" name="approve" className="mt-1" />
-                <span>Jag godkänner offerten och villkoren ovan och har rätt att göra det för {doc.company_name ?? "vår räkning"}.</span>
-              </label>
-              <div className="flex flex-wrap gap-3">
-                <button className="btn btn-primary" type="submit" name="answer" value="accept">Godkänn offerten</button>
-                <button className="btn" type="submit" name="answer" value="decline">Avböj</button>
-              </div>
-            </form>
-          )}
-          {doc.status === "skickad" && expired && (
-            <p className="rounded-lg bg-warn-soft px-4 py-3 text-warn">
-              Offertens giltighetstid har gått ut. Kontakta {doc.salesperson_name || "oss"} så hjälper vi dig.
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:py-10 grid gap-8 lg:grid-cols-[1fr_300px] lg:items-start">
+        <div className="grid gap-10 min-w-0">
+          {doc.status === "accepterad" && (
+            <p className="rounded-xl bg-st-genomford-soft px-5 py-4 text-ok">
+              Offerten är godkänd {doc.accepted_at ? fmtDate(doc.accepted_at) : ""}
+              {doc.accepted_name ? ` av ${doc.accepted_name}` : ""}. Tack! Vi återkommer med bokningsavtal och nästa steg.
             </p>
           )}
-        </section>
+          {doc.status === "avbojd" && <p className="rounded-xl bg-sunk px-5 py-4">Offerten är avböjd.</p>}
 
-        <footer className="text-xs text-muted border-t border-line pt-4">
-          Filadelfia Convention Center AB · Rörstrandsgatan 5, Stockholm
-        </footer>
+          {doc.intro && (
+            <section className="grid gap-3">
+              <p className="whitespace-pre-line text-lg leading-relaxed max-w-prose">{doc.intro}</p>
+              {doc.contact_name && <p className="text-muted">Hälsningar till {doc.contact_name}</p>}
+            </section>
+          )}
+
+          {doc.rooms.length > 0 && (
+            <section className="grid gap-4">
+              <SectionTitle kicker="Lokaler">Där ni kommer att vara</SectionTitle>
+              <div className="grid gap-5 sm:grid-cols-2">
+                {doc.rooms.map((r) => (
+                  <article key={r.name} className="card overflow-hidden grid content-start">
+                    <div className="relative aspect-[3/2] bg-sunk">
+                      {r.image && <Image src={r.image} alt={r.name} fill sizes="(min-width: 1024px) 340px, (min-width: 640px) 50vw, 100vw" className="object-cover" />}
+                    </div>
+                    <div className="p-4 grid gap-2">
+                      <h3 className="font-display text-lg font-semibold">{r.name}</h3>
+                      <p className="flex flex-wrap gap-x-3 text-sm text-muted">
+                        {r.kvm ? <span>{r.kvm.toLocaleString("sv-SE")} kvm</span> : null}
+                        {r.max ? <span>upp till {r.max.toLocaleString("sv-SE")} personer</span> : null}
+                        {roomTimes.get(r.name) ? <span>{roomTimes.get(r.name)} tillfälle{roomTimes.get(r.name) === 1 ? "" : "n"}</span> : null}
+                      </p>
+                      {r.text && <p className="text-sm leading-relaxed">{r.text}</p>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {days.length > 0 && (
+            <section className="grid gap-4">
+              <SectionTitle kicker="Program">Dag för dag</SectionTitle>
+              <ol className="grid gap-3">
+                {days.map(([date, slots]) => (
+                  <li key={date} className="card p-4 grid gap-2 sm:grid-cols-[150px_1fr]">
+                    <div>
+                      <p className="font-display font-semibold">{dayLong(date)}</p>
+                      <p className="text-sm text-muted">{fmtDayMonth(date)} {date.slice(0, 4)}</p>
+                    </div>
+                    <ul className="grid gap-1 text-sm">
+                      {slots.map((x, i) => (
+                        <li key={i} className="flex flex-wrap justify-between gap-x-4 border-b border-line py-1 last:border-0">
+                          <span className="font-medium">{x.room}</span>
+                          <span className="tabular-nums text-muted">{x.time}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
+          <section className="grid gap-4">
+            <SectionTitle kicker="Pris">Vad som ingår</SectionTitle>
+            <div className="card p-5 sm:p-6 grid gap-6">
+              {[...included].map(([group, lines]) => (
+                <div key={group} className="grid gap-1">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">{group}</h3>
+                  <ul>
+                    {lines.map((l, i) => (
+                      <li key={i} className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 border-b border-line py-2.5 last:border-0">
+                        <span className="flex-1 min-w-48">
+                          {l.description}
+                          {l.line_date && <span className="ml-2 text-xs text-muted">{fmtDate(l.line_date)}</span>}
+                        </span>
+                        <span className="text-sm text-muted tabular-nums">
+                          {l.quantity.toLocaleString("sv-SE")} {l.unit} × {fmtKr(l.unit_price)}
+                          {l.discount_pct ? <span className="ml-2 rounded-full bg-brand-soft text-brand px-2 py-0.5 text-xs">−{l.discount_pct} %</span> : null}
+                        </span>
+                        <span className="w-28 text-right font-semibold tabular-nums">{fmtKr(lineTotal(l))}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm tabular-nums border-t-2 border-brand pt-4 sm:ml-auto sm:min-w-80">
+                {t.discount > 0 && (
+                  <>
+                    <dt className="text-muted">Summa före rabatt</dt><dd className="text-right">{fmtKr(t.beforeDiscount)}</dd>
+                    <dt className="text-muted">Rabatt</dt><dd className="text-right">−{fmtKr(t.discount)}</dd>
+                  </>
+                )}
+                <dt className="text-muted">Summa exkl. moms</dt><dd className="text-right">{fmtKr(t.exVat)}</dd>
+                <dt className="text-muted">Moms</dt><dd className="text-right">{fmtKr(t.vat)}</dd>
+                <dt className="font-semibold pt-1">Att betala inkl. moms</dt>
+                <dd className="text-right font-display text-2xl font-semibold text-brand">{fmtKr(t.inclVat)}</dd>
+              </dl>
+            </div>
+          </section>
+
+          {addons.length > 0 && (
+            <section className="grid gap-4">
+              <SectionTitle kicker="Tillval">Gör det ännu bättre</SectionTitle>
+              <p className="text-sm text-muted -mt-2">Ingår inte i summan ovan. Säg till om ni vill lägga till något.</p>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {addons.map((l, i) => (
+                  <li key={i} className="card p-4 grid gap-1">
+                    <span className="font-medium">{l.description}</span>
+                    <span className="flex justify-between text-sm text-muted tabular-nums">
+                      <span>{l.quantity.toLocaleString("sv-SE")} {l.unit} × {fmtKr(l.unit_price)}</span>
+                      <span className="font-semibold text-fg">{fmtKr(lineTotal(l))}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {doc.terms && (
+            <details className="card p-5 group">
+              <summary className="cursor-pointer font-semibold list-none flex justify-between">
+                Villkor <span className="text-muted group-open:rotate-180 transition-transform">⌄</span>
+              </summary>
+              <p className="whitespace-pre-line text-sm text-muted mt-3 max-w-prose">{doc.terms}</p>
+            </details>
+          )}
+
+          <section id="svara" className="scroll-mt-6 grid gap-3">
+            {msg && (
+              <p className={`rounded-xl px-5 py-4 ${msg.ok ? "bg-st-genomford-soft text-ok" : "bg-warn-soft text-warn"}`}>{msg.text}</p>
+            )}
+            {open && (
+              <form action={respond.bind(null, token)} className="card p-5 sm:p-6 grid gap-4 border-t-4 border-t-brand">
+                <div>
+                  <h2 className="font-display text-2xl font-semibold">Svara på offerten</h2>
+                  <p className="text-sm text-muted">Godkänn direkt här, så bokar vi upp lokalerna och skickar bokningsavtalet.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="field">
+                    <label className="label" htmlFor="name">Ditt namn</label>
+                    <input className="input" id="name" name="name" autoComplete="name" required />
+                  </div>
+                  <div className="field">
+                    <label className="label" htmlFor="email">E-post</label>
+                    <input className="input" id="email" name="email" type="email" autoComplete="email" required />
+                  </div>
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="comment">Kommentar (valfritt)</label>
+                  <textarea className="input" id="comment" name="comment" />
+                </div>
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" name="approve" className="mt-1" />
+                  <span>Jag godkänner offerten och villkoren och har rätt att göra det för {doc.company_name ?? "vår räkning"}.</span>
+                </label>
+                <div className="flex flex-wrap gap-3">
+                  <button className="btn btn-primary px-6" type="submit" name="answer" value="accept">Godkänn offerten</button>
+                  <button className="btn" type="submit" name="answer" value="decline">Avböj</button>
+                </div>
+              </form>
+            )}
+            {doc.status === "skickad" && expired && (
+              <p className="rounded-xl bg-warn-soft px-5 py-4 text-warn">
+                Offertens giltighetstid har gått ut. Kontakta {doc.salesperson_name || "oss"} så hjälper vi dig.
+              </p>
+            )}
+          </section>
+        </div>
+
+        {/* Sammanfattning */}
+        <aside className="grid gap-4 lg:sticky lg:top-6 order-first lg:order-none">
+          <div className="card p-5 grid gap-3">
+            <span className="label">Totalt inkl. moms</span>
+            <span className="font-display text-3xl font-semibold text-brand tabular-nums -mt-2">{fmtKr(t.inclVat)}</span>
+            <span className="text-sm text-muted -mt-2">{fmtKr(t.exVat)} exkl. moms</span>
+            {doc.valid_until && (
+              <p className={`text-sm ${expired ? "text-warn" : ""}`}>
+                {expired ? "Gick ut" : "Giltig till"} {fmtDate(doc.valid_until)}
+              </p>
+            )}
+            {open && <a href="#svara" className="btn btn-primary">Svara på offerten</a>}
+            <a className="btn" href={`/offert/${token}/pdf`}>Ladda ner PDF</a>
+          </div>
+          <div className="card p-5 grid gap-1 text-sm">
+            <span className="label">Er kontakt hos oss</span>
+            <span className="font-semibold">{doc.salesperson_name || "Filadelfia Convention Center"}</span>
+            {doc.salesperson_email && <a className="break-all underline underline-offset-2" href={`mailto:${doc.salesperson_email}`}>{doc.salesperson_email}</a>}
+          </div>
+        </aside>
       </main>
+
+      <footer className="border-t border-line">
+        <div className="mx-auto max-w-5xl px-4 py-6 text-xs text-muted flex flex-wrap justify-between gap-2">
+          <span>Filadelfia Convention Center AB · Rörstrandsgatan 5, Stockholm</span>
+          <span>Offert nr {doc.number}</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return <li className="rounded-full bg-white/15 ring-1 ring-white/25 backdrop-blur px-3 py-1">{children}</li>;
+}
+
+function SectionTitle({ kicker, children }: { kicker: string; children: React.ReactNode }) {
+  return (
+    <div className="grid gap-0.5">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">{kicker}</p>
+      <h2 className="font-display text-2xl font-semibold">{children}</h2>
     </div>
   );
 }

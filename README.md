@@ -17,6 +17,7 @@ Internt bokningssystem för Filadelfia Convention Center: lokaler, kunder, evene
 - **Historik** på evenemang och offerter: vem som ändrade vad och när (databastriggers i `audit_log`).
 - **Kalenderprenumeration** (`/konto`): personlig iCal-länk för Outlook, Google och iPhone. Slutar fungera om användaren stängs av.
 - **Användare** (`/anvandare`, admin): roller, namn och aktiv/avstängd.
+- **Mallar** (`/mallar`): återkommande upplägg med lokaler och tider dag för dag (dag 1, dag 2 …) och offertrader. Skapa ett evenemang, och gärna ett offertutkast, från mallen med ett startdatum. Ett befintligt evenemang kan sparas som mall.
 - **Kunder** med kontaktpersoner.
 - **Lokaler** med kapacitet per möblering.
 - **Roller:** Admin, Bokare, Produktion och Läsbehörighet. Admin och bokare ändrar bokningar, övriga läser. Reglerna ligger i databasen (Row Level Security), inte bara i gränssnittet.
@@ -76,8 +77,8 @@ tests/                 tester
 
 - **Prislista** (`/prislista`): artiklar i grupper med pris, kostnad, moms och enhet. Lokalartiklar kan kopplas till en lokal och föreslås då automatiskt när en offert skapas från ett evenemang. Standardtexter för inledning, villkor och giltighet finns under *Offerttexter*. Bara admin ändrar.
 - **Offert** (`/offerter`): rader per grupp, rabatt per rad eller på alla rader, tillval som inte ingår i totalen, intern kalkyl med kostnad och marginal.
-- **Kundlänk** (`/offert/<token>`): blir aktiv när offerten markeras som skickad. Kunden kan läsa, ladda ner PDF och godkänna eller avböja. Länken kräver ingen inloggning men visar bara just den offerten och aldrig kostnader.
-- **PDF** skapas på servern med `@react-pdf/renderer`.
+- **Kundlänk** (`/offert/<token>`): en säljande sida med stor bild, kort om varje bokad lokal (bild, säljtext, kvm, kapacitet), programmet dag för dag, prisuppställning och godkänn-knapp. Bilderna ligger i `public/lokaler/` och kopplas till lokalen via `rooms.image_path`; säljtexten i `rooms.sales_text` (dellokaler ärver från huvudlokalen). Blir aktiv när offerten markeras som skickad. Kunden kan läsa, ladda ner PDF och godkänna eller avböja. Länken kräver ingen inloggning men visar bara just den offerten och aldrig kostnader.
+- **PDF** skapas på servern med `@react-pdf/renderer`, med omslagsbild och lokalkort.
 
 ## Nästa steg
 
