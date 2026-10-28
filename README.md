@@ -65,11 +65,18 @@ src/components/        formulär och gemensamma komponenter
 tests/                 tester
 ```
 
+## Offerter
+
+- **Prislista** (`/prislista`): artiklar i grupper med pris, kostnad, moms och enhet. Lokalartiklar kan kopplas till en lokal och föreslås då automatiskt när en offert skapas från ett evenemang. Standardtexter för inledning, villkor och giltighet finns under *Offerttexter*. Bara admin ändrar.
+- **Offert** (`/offerter`): rader per grupp, rabatt per rad eller på alla rader, tillval som inte ingår i totalen, intern kalkyl med kostnad och marginal.
+- **Kundlänk** (`/offert/<token>`): blir aktiv när offerten markeras som skickad. Kunden kan läsa, ladda ner PDF och godkänna eller avböja. Länken kräver ingen inloggning men visar bara just den offerten och aldrig kostnader.
+- **PDF** skapas på servern med `@react-pdf/renderer`.
+
 ## Nästa steg
 
-1. Smidigare bokningar: ändra tidsluckor, lägga till flera tider på en gång, kopiera dagar och evenemang, månadsvy.
-2. Offert med prislista, PDF och godkännande via länk.
-3. Import från ShowWizrd.
+1. Import från ShowWizrd som testdata.
+2. Användarsida för att bjuda in kollegor och ändra roller.
+3. Utskick av offert via e-post direkt från appen (kräver egen SMTP).
 4. Kopplingar: ekonomisystem, Ticketmaster, förfrågningar från hemsidan, kalenderprenumeration.
 
 Personal/crew och CRM (affärer, säljpipeline) ingår inte för tillfället. Kundregistret finns kvar eftersom bokningar och offerter behöver det.
