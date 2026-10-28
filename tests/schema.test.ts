@@ -134,3 +134,87 @@ describe("behörigheter", () => {
     });
   });
 });
+
+describe("offerter", () => {
+  async function asAnon<T>(fn: () => Promise<T>): Promise<T> {
+    await db.exec(`grant usage on schema public to anon; set role anon;`);
+    try {
+      return await fn();
+    } finally {
+      await db.exec(`reset role;`);
+    }
+  }
+
+  it("har prislistan med artiklar kopplade till lokaler", async () => {
+    const r = await db.query<{ n: number; linked: number }>(
+      "select count(*)::int as n, count(room_id)::int as linked from articles",
+    );
+    expect(r.rows[0].n).toBe(200);
+    expect(r.rows[0].linked).toBe(12);
+  });
+
+  it("räknar samma summor i databasen som i appen", async () => {
+    const q = await db.query<{ id: string }>("insert into quotes (title) values ('Test') returning id");
+    const id = q.rows[0].id;
+    await db.query(
+      `insert into quote_lines (quote_id, group_id, description, quantity, unit_price, discount_pct, kind) values
+       ($1, 'lokal', 'Stora salen', 1, 90000, 20, 'ingar'),
+       ($1, 'teknik', 'Scen', 1, 58000, 0, 'ingar'),
+       ($1, 'mat', 'Hyra kök', 1, 3000, 0, 'tillval')`,
+      [id],
+    );
+    const r = await db.query<{ total_ex_vat: string; total_vat: string; addons_ex_vat: string }>(
+      "select total_ex_vat, total_vat, addons_ex_vat from quote_overview where id = $1",
+      [id],
+    );
+    expect(Number(r.rows[0].total_ex_vat)).toBe(130000);
+    expect(Number(r.rows[0].total_vat)).toBe(32500);
+    expect(Number(r.rows[0].addons_ex_vat)).toBe(3000);
+  });
+
+  it("visar bara skickade offerter för kunden och låter kunden godkänna en gång", async () => {
+    const q = await db.query<{ id: string; share_token: string }>(
+      "insert into quotes (title, valid_until) values ('Kundtest', current_date + 10) returning id, share_token",
+    );
+    const { id, share_token } = q.rows[0];
+
+    const hidden = await asAnon(() => db.query<{ q: unknown }>("select public_quote($1) as q", [share_token]));
+    expect(hidden.rows[0].q).toBeNull();
+
+    await db.query("update quotes set status = 'skickad' where id = $1", [id]);
+    const shown = await asAnon(() => db.query<{ q: { title: string } }>("select public_quote($1) as q", [share_token]));
+    expect(shown.rows[0].q.title).toBe("Kundtest");
+
+    const bad = await asAnon(() =>
+      db.query<{ r: string }>("select respond_to_quote($1, true, 'Anna', 'inte-en-adress') as r", [share_token]),
+    );
+    expect(bad.rows[0].r).toBe("ogiltig");
+
+    const ok = await asAnon(() =>
+      db.query<{ r: string }>("select respond_to_quote($1, true, 'Anna Andersson', 'anna@exempel.se') as r", [share_token]),
+    );
+    expect(ok.rows[0].r).toBe("accepterad");
+
+    const again = await asAnon(() =>
+      db.query<{ r: string }>("select respond_to_quote($1, false, 'Anna', 'anna@exempel.se') as r", [share_token]),
+    );
+    expect(again.rows[0].r).toBe("ej_tillganglig");
+
+    const s = await db.query<{ status: string; accepted_name: string }>("select status, accepted_name from quotes where id = $1", [id]);
+    expect(s.rows[0]).toEqual({ status: "accepterad", accepted_name: "Anna Andersson" });
+  });
+
+  it("utloggade kan inte läsa offerttabellerna direkt", async () => {
+    await expect(asAnon(() => db.query("select * from quotes"))).rejects.toThrow(/permission denied/);
+    await expect(asAnon(() => db.query("select * from articles"))).rejects.toThrow(/permission denied/);
+  });
+
+  it("läsare kan se prislistan men inte ändra den", async () => {
+    await asUser(LASARE, async () => {
+      const r = await db.query<{ n: number }>("select count(*)::int as n from articles");
+      expect(r.rows[0].n).toBe(200);
+      const u = await db.query("update articles set price = 1 where article_no = '1'");
+      expect(u.affectedRows).toBe(0);
+    });
+  });
+});

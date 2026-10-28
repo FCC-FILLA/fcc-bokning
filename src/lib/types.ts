@@ -113,3 +113,69 @@ export type BookingConflict = {
   other_starts_at: string;
   other_ends_at: string;
 };
+
+export type ArticleGroup = { id: string; name: string; sort_order: number };
+
+export type Article = {
+  id: string;
+  article_no: string | null;
+  name: string;
+  group_id: string;
+  unit: string;
+  price: number | null;
+  cost: number;
+  vat_rate: number;
+  room_id: string | null;
+  description: string | null;
+  active: boolean;
+  sort_order: number;
+};
+
+export type Quote = {
+  id: string;
+  number: number;
+  title: string;
+  status: "utkast" | "skickad" | "accepterad" | "avbojd";
+  event_id: string | null;
+  company_id: string | null;
+  contact_id: string | null;
+  salesperson_id: string | null;
+  valid_until: string | null;
+  intro: string | null;
+  terms: string | null;
+  share_token: string;
+  sent_at: string | null;
+  accepted_at: string | null;
+  accepted_name: string | null;
+  accepted_email: string | null;
+  declined_at: string | null;
+  customer_comment: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type QuoteOverview = Quote & {
+  company_name: string | null;
+  contact_name: string | null;
+  event_title: string | null;
+  total_ex_vat: number;
+  total_vat: number;
+  addons_ex_vat: number;
+};
+
+export type QuoteLine = {
+  id: string;
+  quote_id: string;
+  group_id: string;
+  article_id: string | null;
+  description: string;
+  line_date: string | null;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  cost: number;
+  discount_pct: number;
+  vat_rate: number;
+  kind: "ingar" | "tillval";
+  sort_order: number;
+};

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireBooker } from "@/lib/auth";
-import { addDays, localToIso } from "@/lib/datum";
+import { daysBetween, expandRows, parseRows, shiftIso } from "@/lib/bokning";
+import { addDays, isoToDate, localToIso } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
 import { STATUSES } from "@/lib/types";
 
@@ -46,37 +47,10 @@ function readEvent(fd: FormData) {
   return EventSchema.safeParse(raw);
 }
 
-/** Läser bokningsfälten och returnerar en rad per lokal och vecka. */
 function readBookings(fd: FormData, eventId: string) {
-  const roomIds = fd.getAll("room_id").map(String).filter(Boolean);
-  const date = opt(fd.get("date"));
-  const from = opt(fd.get("from"));
-  const to = opt(fd.get("to"));
-  const repeat = Math.min(52, Math.max(1, Number(fd.get("repeat_weeks") ?? 1) || 1));
-  const setup = opt(fd.get("setup_id"));
-  const note = opt(fd.get("booking_note"));
-
-  if (!roomIds.length && !date) return { rows: [], error: null };
-  if (!roomIds.length) return { rows: [], error: "Välj minst en lokal." };
-  if (!date || !from || !to) return { rows: [], error: "Ange datum, starttid och sluttid." };
-
-  const rows = [];
-  for (let w = 0; w < repeat; w++) {
-    const d = addDays(date, w * 7);
-    // Slutar man före eller samma tid som man börjar, slutar bokningen nästa dag (t.ex. 18:00–02:00).
-    const endDate = to <= from ? addDays(d, 1) : d;
-    for (const room_id of roomIds) {
-      rows.push({
-        event_id: eventId,
-        room_id,
-        starts_at: localToIso(`${d}T${from}`),
-        ends_at: localToIso(`${endDate}T${to}`),
-        setup_id: setup,
-        note,
-      });
-    }
-  }
-  return { rows, error: null };
+  const { rows, error } = parseRows(opt(fd.get("rows")));
+  if (error) return { rows: [], error };
+  return { rows: expandRows(rows, Number(fd.get("repeat_weeks") ?? 1), eventId), error: null };
 }
 
 export async function createEvent(fd: FormData) {
@@ -134,4 +108,86 @@ export async function deleteBooking(eventId: string, bookingId: string) {
   await supabase.from("bookings").delete().eq("id", bookingId).eq("event_id", eventId);
   revalidatePath("/", "layout");
   redirect(`/evenemang/${eventId}#bokningar`);
+}
+
+const back = (eventId: string, q: string) => redirect(`/evenemang/${eventId}?${q}#bokningar`);
+const err = (msg: string) => `fel=${encodeURIComponent(msg)}`;
+
+/** Ändra lokal, tid, möblering eller notering på en befintlig bokning. */
+export async function updateBooking(eventId: string, bookingId: string, fd: FormData) {
+  await requireBooker();
+  const room_id = opt(fd.get("room_id"));
+  const start = opt(fd.get("starts_at"));
+  const end = opt(fd.get("ends_at"));
+  if (!room_id || !start || !end) back(eventId, err("Ange lokal, start och slut."));
+  const starts_at = localToIso(start!);
+  const ends_at = localToIso(end!);
+  if (ends_at <= starts_at) back(eventId, err("Sluttiden måste vara efter starttiden."));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("bookings")
+    .update({ room_id, starts_at, ends_at, setup_id: opt(fd.get("setup_id")), note: opt(fd.get("note")) })
+    .eq("id", bookingId)
+    .eq("event_id", eventId);
+  revalidatePath("/", "layout");
+  back(eventId, error ? err("Det gick inte att spara ändringen.") : "andrat=1");
+}
+
+/** Kopiera alla bokningar som börjar en viss dag till ett annat datum. */
+export async function copyDay(eventId: string, fromDate: string, fd: FormData) {
+  await requireBooker();
+  const toDate = opt(fd.get("to_date"));
+  if (!toDate || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) back(eventId, err("Välj ett datum att kopiera till."));
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("bookings")
+    .select("room_id, starts_at, ends_at, setup_id, note")
+    .eq("event_id", eventId)
+    .gte("starts_at", localToIso(`${fromDate}T00:00`))
+    .lt("starts_at", localToIso(`${addDays(fromDate, 1)}T00:00`));
+  const offset = daysBetween(fromDate, toDate!);
+  const rows = (data ?? []).map((b) => ({
+    ...b,
+    event_id: eventId,
+    starts_at: shiftIso(b.starts_at, offset),
+    ends_at: shiftIso(b.ends_at, offset),
+  }));
+  if (!rows.length) back(eventId, err("Det finns inga bokningar den dagen."));
+  const { error } = await supabase.from("bookings").insert(rows);
+  revalidatePath("/", "layout");
+  back(eventId, error ? err("Det gick inte att kopiera dagen.") : `tillagt=${rows.length}`);
+}
+
+/** Skapa ett nytt evenemang med samma uppgifter och bokningar, flyttat till ett nytt startdatum. */
+export async function duplicateEvent(eventId: string, fd: FormData) {
+  await requireBooker();
+  const newStart = opt(fd.get("new_start"));
+  if (!newStart || !/^\d{4}-\d{2}-\d{2}$/.test(newStart)) redirect(`/evenemang/${eventId}?${err("Välj ett startdatum för kopian.")}`);
+  const supabase = await createClient();
+  const [{ data: ev }, { data: bookings }] = await Promise.all([
+    supabase.from("events").select("*").eq("id", eventId).single(),
+    supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note").eq("event_id", eventId).order("starts_at"),
+  ]);
+  if (!ev) redirect("/evenemang");
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, created_at, updated_at, created_by, ...rest } = ev;
+  const { data: copy, error } = await supabase
+    .from("events")
+    .insert({ ...rest, title: `${ev.title} (kopia)`, status: "forfragan", option_expires_on: null })
+    .select("id")
+    .single();
+  if (error || !copy) redirect(`/evenemang/${eventId}?${err("Det gick inte att kopiera evenemanget.")}`);
+  if (bookings?.length) {
+    const offset = daysBetween(isoToDate(bookings[0].starts_at), newStart!);
+    await supabase.from("bookings").insert(
+      bookings.map((b) => ({
+        ...b,
+        event_id: copy.id,
+        starts_at: shiftIso(b.starts_at, offset),
+        ends_at: shiftIso(b.ends_at, offset),
+      })),
+    );
+  }
+  revalidatePath("/", "layout");
+  redirect(`/evenemang/${copy.id}?kopierad=1`);
 }

@@ -73,6 +73,11 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; }
   .st-genomford { background: var(--color-st-genomford-soft); color: var(--color-st-genomford); border-color: var(--color-st-genomford); }
   .st-avbokad { background: var(--color-st-avbokad-soft); color: var(--color-st-avbokad); border-color: var(--color-st-avbokad); text-decoration: line-through; }
 
+  .q-utkast { background: var(--color-sunk); color: var(--color-muted); }
+  .q-skickad { background: var(--color-st-forfragan-soft); color: var(--color-st-forfragan); }
+  .q-accepterad { background: var(--color-st-genomford-soft); color: var(--color-st-genomford); }
+  .q-avbojd { background: var(--color-warn-soft); color: var(--color-warn); }
+
   .table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
   .table th { text-align: left; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--color-muted); padding: 10px 12px; border-bottom: 1px solid var(--color-line); }
   .table td { padding: 10px 12px; border-bottom: 1px solid var(--color-line); vertical-align: top; }

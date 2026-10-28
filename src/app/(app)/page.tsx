@@ -84,6 +84,7 @@ export default async function SchedulePage({
         >
           {showCancelled ? "Dölj avbokade" : "Visa avbokade"}
         </Link>
+        <Link className="btn" href={`/manad?m=${monday.slice(0, 7)}`}>Månadsvy</Link>
         {booker && <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>}
       </div>
 

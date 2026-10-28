@@ -4,10 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const ITEMS = [
-  { href: "/", label: "Schema" },
+  { href: "/", label: "Vecka" },
+  { href: "/manad", label: "Månad" },
   { href: "/evenemang", label: "Evenemang" },
+  { href: "/offerter", label: "Offerter" },
   { href: "/kunder", label: "Kunder" },
   { href: "/lokaler", label: "Lokaler" },
+  { href: "/prislista", label: "Prislista" },
   { href: "/krockar", label: "Krockar" },
 ];
 

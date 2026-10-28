@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // PDF-biblioteket körs som vanligt Node-paket i stället för att paketeras.
+  serverExternalPackages: ["@react-pdf/renderer"],
 };
 
 export default nextConfig;

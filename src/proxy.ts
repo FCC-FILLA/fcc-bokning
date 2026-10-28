@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Förnyar inloggningen vid varje sidladdning och skickar utloggade till inloggningssidan.
-const PUBLIC_PATHS = ["/logga-in", "/auth/confirm"];
+// Kundens offertlänkar (/offert/...) är öppna utan inloggning.
+const PUBLIC_PATHS = ["/logga-in", "/auth/confirm", "/offert/"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
