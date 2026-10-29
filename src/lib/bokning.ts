@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, isoToDate, isoToLocal, localToIso } from "@/lib/datum";
 
 export type BookingInputRow = {
@@ -76,3 +77,13 @@ export function daysBetween(from: string, to: string) {
 }
 
 export { isoToDate };
+
+/** "1:a", "2:a", "3:e" … för optionskön. */
+export const optionOrdinal = (n: number) => `${n}:${n === 1 || n === 2 ? "a" : "e"}`;
+
+/** Plats i optionskön för obekräftade evenemang som delar lokal och tid med andra. */
+export async function loadOptionPlaces(supabase: SupabaseClient, eventIds: string[]) {
+  if (!eventIds.length) return new Map<string, number>();
+  const { data } = await supabase.from("option_places").select("event_id, place").eq("shared", true).in("event_id", [...new Set(eventIds)]);
+  return new Map(((data ?? []) as { event_id: string; place: number }[]).map((x) => [x.event_id, x.place]));
+}

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canBook, requireProfile } from "@/lib/auth";
 import { addDays, dayLong, fmtDate, fmtDayMonth, fmtRange, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
-import { daysBetween } from "@/lib/bokning";
+import { daysBetween, optionOrdinal as ordinal } from "@/lib/bokning";
 import { depthOf } from "@/lib/lokaler";
 import { getLookups } from "@/lib/lookups";
 import { QUOTE_STATUS_LABEL, fmtKr, type QuoteStatus } from "@/lib/offert";
@@ -22,7 +22,6 @@ import {
 } from "../actions";
 
 type QueueRow = { event_id: string; title: string; status: EventRow["status"]; company_name: string | null; option_expires_on: string | null; place: number };
-const ordinal = (n: number) => `${n}:${n === 1 || n === 2 ? "a" : "e"}`;
 
 type QuoteRow = { id: string; number: number; title: string; status: QuoteStatus; total_ex_vat: number; accepted_name: string | null };
 

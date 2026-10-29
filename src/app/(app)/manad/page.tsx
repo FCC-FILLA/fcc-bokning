@@ -1,3 +1,4 @@
+import { loadOptionPlaces, optionOrdinal } from "@/lib/bokning";
 import Link from "next/link";
 import { canBook, getProfile } from "@/lib/auth";
 import { addDays, dayStartIso, fmtTime, isoToDate, isoWeek, mondayOf, todayDate } from "@/lib/datum";
@@ -47,6 +48,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
     .gt("ends_at", dayStartIso(gridStart))
     .order("starts_at");
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => showCancelled || r.events.status !== "avbokad");
+  const optionPlace = await loadOptionPlaces(supabase, rows.filter((r) => r.events.status === "forfragan" || r.events.status === "preliminar").map((r) => r.event_id));
 
   // Personal per dag: tillsatta av behövda platser.
   const staffPerDay = new Map<string, { filled: number; needed: number; shifts: number }>();
@@ -145,12 +147,13 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
                     <Link
                       key={e.id}
                       href={`/evenemang/${e.id}`}
-                      title={`${e.title} · ${STATUS_LABEL[e.status]} · ${e.rooms} lokal${e.rooms === 1 ? "" : "er"}`}
+                      title={`${e.title} · ${STATUS_LABEL[e.status]}${optionPlace.has(e.id) ? ` · ${optionOrdinal(optionPlace.get(e.id)!)} option` : ""} · ${e.rooms} lokal${e.rooms === 1 ? "" : "er"}`}
                       className={`block truncate rounded border-l-[3px] px-1.5 py-0.5 text-xs font-semibold st-${e.status} ${
                         e.status === "preliminar" ? "border-dashed" : ""
                       }`}
                     >
-                      <span className="font-mono font-normal opacity-80">{e.start}</span> {e.title}
+                      <span className="font-mono font-normal opacity-80">{e.start}</span>{" "}
+                      {optionPlace.has(e.id) && <span className="rounded bg-white/70 px-1 font-mono text-[10px]">{optionOrdinal(optionPlace.get(e.id)!)}</span>} {e.title}
                     </Link>
                   ))}
                   {staffPerDay.get(d) && (() => {

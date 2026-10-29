@@ -1,3 +1,4 @@
+import { loadOptionPlaces, optionOrdinal } from "@/lib/bokning";
 import Link from "next/link";
 import { canBook, getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -70,12 +71,14 @@ export default async function SchedulePage({
   const overlap = makeOverlap(rooms);
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
 
-  // Bokningar som krockar med någon annan aktiv bokning.
+  // Bokningar som krockar med någon annan aktiv bokning. Två obekräftade på samma tid är optioner i kö, inte en krock.
   const clashing = new Set<string>();
   for (const a of active)
     for (const b of active)
-      if (a.id !== b.id && a.starts_at < b.ends_at && b.starts_at < a.ends_at && overlap(a.room_id, b.room_id))
+      if (a.id !== b.id && a.starts_at < b.ends_at && b.starts_at < a.ends_at && overlap(a.room_id, b.room_id)
+        && (a.events.status === "bekraftad" || b.events.status === "bekraftad"))
         clashing.add(a.id);
+  const optionPlace = await loadOptionPlaces(supabase, active.filter((b) => b.events.status !== "bekraftad").map((b) => b.event_id));
 
   const inDay = (b: Row, d: string) => b.starts_at < dayStartIso(addDays(d, 1)) && b.ends_at > dayStartIso(d);
   const timeLabel = (b: Row, d: string) => {
@@ -179,13 +182,16 @@ export default async function SchedulePage({
                             <Link
                               key={b.id}
                               href={`/evenemang/${b.event_id}`}
-                              title={`${b.events.title} · ${STATUS_LABEL[b.events.status]}`}
+                              title={`${b.events.title} · ${STATUS_LABEL[b.events.status]}${optionPlace.has(b.event_id) ? ` · ${optionOrdinal(optionPlace.get(b.event_id)!)} option` : ""}`}
                               className={`pointer-events-auto block rounded-md border-l-[3px] px-1.5 py-0.5 text-xs font-semibold leading-tight st-${b.events.status} ${
                                 b.events.status === "preliminar" ? "border-dashed" : ""
                               } ${clashing.has(b.id) ? "ring-[1.5px] ring-warn ring-inset" : ""}`}
                             >
                               <span className="block font-mono font-normal opacity-80">{timeLabel(b, d)}</span>
-                              <span className="block truncate">{b.events.title}</span>
+                              <span className="block truncate">
+                                {optionPlace.has(b.event_id) && <span className="mr-1 rounded bg-white/70 px-1 font-mono text-[10px]">{optionOrdinal(optionPlace.get(b.event_id)!)}</span>}
+                                {b.events.title}
+                              </span>
                             </Link>
                           ))}
                           {via.length > 0 && (

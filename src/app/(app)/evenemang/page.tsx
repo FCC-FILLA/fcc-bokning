@@ -1,3 +1,4 @@
+import { loadOptionPlaces, optionOrdinal } from "@/lib/bokning";
 import Link from "next/link";
 import { canBook, getProfile } from "@/lib/auth";
 import { fmtRange } from "@/lib/datum";
@@ -32,8 +33,7 @@ export default async function EventsPage({
 
   const { data } = await query.limit(300);
   const events = (data ?? []) as EventOverview[];
-  const { data: placeData } = await supabase.from("option_places").select("event_id, place").eq("shared", true).in("event_id", events.map((e) => e.id));
-  const optionPlace = new Map(((placeData ?? []) as { event_id: string; place: number }[]).map((x) => [x.event_id, x.place]));
+  const optionPlace = await loadOptionPlaces(supabase, events.filter((e) => e.status === "forfragan" || e.status === "preliminar").map((e) => e.id));
 
   return (
     <>
@@ -94,7 +94,7 @@ export default async function EventsPage({
                   <td>{e.booking_count}</td>
                   <td className="whitespace-nowrap">
                     <StatusPill status={e.status} />
-                    {optionPlace.has(e.id) && <span className="ml-2 text-xs font-semibold text-st-preliminar">{optionPlace.get(e.id)}:{optionPlace.get(e.id)! <= 2 ? "a" : "e"} option</span>}
+                    {optionPlace.has(e.id) && <span className="ml-2 text-xs font-semibold text-st-preliminar">{optionOrdinal(optionPlace.get(e.id)!)} option</span>}
                   </td>
                 </tr>
               ))}
