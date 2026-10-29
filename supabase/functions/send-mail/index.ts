@@ -1,6 +1,6 @@
 // Skickar e-postkön (email_outbox) via Resend. Anropas varje minut av pg_cron och direkt från appen.
 // Utan RESEND_API_KEY gör funktionen ingenting, och mejlen ligger kvar i kön.
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
