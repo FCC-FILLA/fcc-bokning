@@ -535,3 +535,79 @@ describe("appnotiser", () => {
     });
   });
 });
+
+describe("inbjudningskedja för frilans", () => {
+  it("bjuder in i tur och ordning, går vidare vid nej och vid utgången svarstid", async () => {
+    const people = await db.query<{ id: string; link_token: string; name: string }>(`
+      insert into staff (name, email, kind) values
+        ('Frida Ljud', 'frida@ljud.se', 'frilans'), ('Olle Ljud', 'olle@ljud.se', 'frilans'), ('Sara Ljud', 'sara@ljud.se', 'frilans')
+      returning id, link_token, name`);
+    const [frida, olle, sara] = people.rows;
+    const sh = await db.query<{ id: string }>(
+      `insert into shifts (function_id, staff_kind, starts_at, ends_at, needed, respond_hours)
+       values ((select id from staff_functions where name = 'Ljudtekniker'), 'frilans', now() + interval '10 days', now() + interval '10 days 8 hours', 1, 24) returning id`,
+    );
+    const shift = sh.rows[0].id;
+    for (const [i, p] of [frida, olle, sara].entries()) {
+      await db.query("insert into shift_assignments (shift_id, staff_id, status, invite_order) values ($1, $2, 'vantar', $3)", [shift, p.id, i + 1]);
+    }
+    const status = async () =>
+      (await db.query<{ name: string; status: string }>(
+        "select s.name, a.status::text from shift_assignments a join staff s on s.id = a.staff_id where a.shift_id = $1 order by a.invite_order",
+        [shift],
+      )).rows.map((r) => `${r.name.split(" ")[0]}:${r.status}`);
+
+    await db.query("select advance_invites($1)", [shift]);
+    expect(await status()).toEqual(["Frida:inbjuden", "Olle:vantar", "Sara:vantar"]);
+    const mail = await db.query<{ to_email: string; link: string }>("select to_email, link from email_outbox where shift_id = $1", [shift]);
+    expect(mail.rows).toHaveLength(1);
+    expect(mail.rows[0].to_email).toBe("frida@ljud.se");
+    expect(mail.rows[0].link).toContain(`/pass/${frida.link_token}`);
+
+    // Frida tackar nej via länken (utloggad) → Olle får frågan.
+    await db.exec("set role anon");
+    try {
+      expect((await db.query<{ r: string }>("select link_respond($1, $2, false) as r", [frida.link_token, shift])).rows[0].r).toBe("ok");
+    } finally {
+      await db.exec("reset role");
+    }
+    expect(await status()).toEqual(["Frida:avbojd", "Olle:inbjuden", "Sara:vantar"]);
+
+    // Olle svarar inte i tid → Sara får frågan och tackar ja.
+    await db.query("update shift_assignments set respond_by = now() - interval '1 minute' where shift_id = $1 and staff_id = $2", [shift, olle.id]);
+    await db.query("select advance_invites(null)");
+    expect(await status()).toEqual(["Frida:avbojd", "Olle:utgangen", "Sara:inbjuden"]);
+    await db.exec("set role anon");
+    try {
+      expect((await db.query<{ r: string }>("select link_respond($1, $2, true) as r", [sara.link_token, shift])).rows[0].r).toBe("ok");
+      // Fel person kan inte svara.
+      expect((await db.query<{ r: string }>("select link_respond($1, $2, true) as r", [olle.link_token, shift])).rows[0].r).toBe("ej_inbjuden");
+    } finally {
+      await db.exec("reset role");
+    }
+    expect(await status()).toEqual(["Frida:avbojd", "Olle:utgangen", "Sara:tilldelad"]);
+  });
+
+  it("leverantörspass skapar en bokning att bekräfta och ett mejl", async () => {
+    const s = await db.query<{ id: string; link_token: string }>(
+      "insert into staff (name, company, email, kind) values ('Lena', 'Rent & Fint AB', 'lena@rent.se', 'leverantor') returning id, link_token",
+    );
+    const sh = await db.query<{ id: string }>(
+      `insert into shifts (function_id, supplier_id, staff_kind, starts_at, ends_at, needed)
+       values ((select id from staff_functions where name = 'Städ'), $1, 'leverantor', now() + interval '3 days', now() + interval '3 days 4 hours', 4) returning id`,
+      [s.rows[0].id],
+    );
+    const a = await db.query<{ status: string }>("select status::text from shift_assignments where shift_id = $1", [sh.rows[0].id]);
+    expect(a.rows[0].status).toBe("inbjuden");
+    const m = await db.query<{ subject: string }>("select subject from email_outbox where shift_id = $1", [sh.rows[0].id]);
+    expect(m.rows[0].subject).toMatch(/^Ny bokning: Städ /);
+    await db.exec("set role anon");
+    try {
+      expect((await db.query<{ r: string }>("select link_respond($1, $2, true) as r", [s.rows[0].link_token, sh.rows[0].id])).rows[0].r).toBe("ok");
+    } finally {
+      await db.exec("reset role");
+    }
+    const b = await db.query<{ status: string }>("select status::text from shift_assignments where shift_id = $1", [sh.rows[0].id]);
+    expect(b.rows[0].status).toBe("tilldelad");
+  });
+});

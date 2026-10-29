@@ -56,6 +56,7 @@ function readShift(fd: FormData, back: string) {
     supplier_id: opt(fd.get("supplier_id")),
     status: ["utkast", "oppen", "stangd"].includes(status) ? status : "oppen",
     hourly_rate: num(fd.get("hourly_rate")),
+    respond_hours: Math.min(336, Math.max(1, Math.round(num(fd.get("respond_hours")) ?? 24))),
   };
 }
 
@@ -238,4 +239,57 @@ export async function saveFunction(id: string | null, fd: FormData) {
   if (error) fail("/personal/funktioner", "Det gick inte att spara.");
   refresh();
   redirect(`/personal/funktioner?sparat=${encodeURIComponent(name!)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Inbjudningskedja (frilans)
+// ---------------------------------------------------------------------------
+
+export async function addToQueue(shiftId: string, fd: FormData) {
+  await requireStaffManager();
+  const back = `/personal/pass/${shiftId}`;
+  const ids = fd.getAll("staff_id").map(String).filter(Boolean);
+  if (!ids.length) fail(back, "Välj minst en person.");
+  const supabase = await createClient();
+  const { data: cur } = await supabase.from("shift_assignments").select("staff_id, invite_order").eq("shift_id", shiftId);
+  const existing = new Set(((cur ?? []) as { staff_id: string }[]).map((x) => x.staff_id));
+  let order = Math.max(0, ...((cur ?? []) as { invite_order: number | null }[]).map((x) => x.invite_order ?? 0));
+  const rows = ids.filter((id) => !existing.has(id)).map((staff_id) => ({ shift_id: shiftId, staff_id, status: "vantar", invite_order: ++order }));
+  if (rows.length) await supabase.from("shift_assignments").insert(rows);
+  refresh(back);
+  redirect(`${back}#inbjudningar`);
+}
+
+export async function moveInQueue(shiftId: string, assignmentId: string, dir: -1 | 1) {
+  await requireStaffManager();
+  const supabase = await createClient();
+  const { data } = await supabase.from("shift_assignments").select("id, invite_order").eq("shift_id", shiftId).eq("status", "vantar").order("invite_order");
+  const list = (data ?? []) as { id: string; invite_order: number }[];
+  const i = list.findIndex((x) => x.id === assignmentId);
+  const j = i + dir;
+  if (i >= 0 && j >= 0 && j < list.length) {
+    await supabase.from("shift_assignments").update({ invite_order: list[j].invite_order }).eq("id", list[i].id);
+    await supabase.from("shift_assignments").update({ invite_order: list[i].invite_order }).eq("id", list[j].id);
+  }
+  refresh(`/personal/pass/${shiftId}`);
+  redirect(`/personal/pass/${shiftId}#inbjudningar`);
+}
+
+export async function removeFromQueue(shiftId: string, assignmentId: string) {
+  await requireStaffManager();
+  const supabase = await createClient();
+  await supabase.from("shift_assignments").delete().eq("id", assignmentId).in("status", ["vantar", "utgangen", "avbojd"]);
+  refresh(`/personal/pass/${shiftId}`);
+  redirect(`/personal/pass/${shiftId}#inbjudningar`);
+}
+
+/** Skicka frågan till nästa på tur tills passet är fullt. */
+export async function sendInvites(shiftId: string) {
+  await requireStaffManager();
+  const back = `/personal/pass/${shiftId}`;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("advance_invites", { p_shift: shiftId });
+  refresh(back);
+  if (error) fail(back, "Det gick inte att skicka inbjudningarna.");
+  redirect(`${back}?inbjudna=${data ?? 0}#inbjudningar`);
 }

@@ -57,3 +57,12 @@ export async function saveQuoteSettings(fd: FormData) {
   revalidatePath("/", "layout");
   redirect(`${path}?sparad=1`);
 }
+
+/** Markera ett mejl i kön som skickat för hand, eller stryk det. */
+export async function setMailStatus(id: string, status: "skickad" | "struken") {
+  await requireProfile();
+  const supabase = await createClient();
+  await supabase.from("email_outbox").update({ status, sent_at: status === "skickad" ? new Date().toISOString() : null }).eq("id", id);
+  revalidatePath("/installningar/epost");
+  redirect("/installningar/epost");
+}

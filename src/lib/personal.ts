@@ -2,7 +2,7 @@
 
 export type StaffKind = "intern" | "frilans" | "leverantor";
 export type ShiftStatus = "utkast" | "oppen" | "stangd";
-export type AssignmentStatus = "ansokt" | "tilldelad" | "nekad" | "aterkallad" | "inbjuden" | "avbojd" | "utgangen";
+export type AssignmentStatus = "ansokt" | "tilldelad" | "nekad" | "aterkallad" | "inbjuden" | "avbojd" | "utgangen" | "vantar";
 
 export const KIND_LABEL: Record<StaffKind, string> = { intern: "Intern", frilans: "Frilans", leverantor: "Leverantör" };
 export const SHIFT_STATUS_LABEL: Record<ShiftStatus, string> = { utkast: "Utkast", oppen: "Öppen för ansökan", stangd: "Stängd" };
@@ -14,6 +14,7 @@ export const ASSIGNMENT_LABEL: Record<AssignmentStatus, string> = {
   inbjuden: "Inbjuden",
   avbojd: "Tackade nej",
   utgangen: "Svarade inte",
+  vantar: "På tur",
 };
 
 export type StaffFunction = { id: string; name: string; color: string; hourly_rate: number; active: boolean; sort_order: number };
@@ -44,8 +45,18 @@ export type Shift = {
   title: string | null;
   note: string | null;
   hourly_rate: number | null;
+  respond_hours?: number;
 };
-export type Assignment = { id: string; shift_id: string; staff_id: string; status: AssignmentStatus; applied_at: string; decided_at: string | null };
+export type Assignment = {
+  id: string;
+  shift_id: string;
+  staff_id: string;
+  status: AssignmentStatus;
+  applied_at: string;
+  decided_at: string | null;
+  invite_order?: number | null;
+  respond_by?: string | null;
+};
 
 /** Timmar för ett pass, med två decimaler. */
 export const shiftHours = (s: { starts_at: string; ends_at: string }) =>

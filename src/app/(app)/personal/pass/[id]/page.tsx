@@ -8,7 +8,8 @@ import { getStaffLookups } from "@/lib/personal-data";
 import { createClient } from "@/lib/supabase/server";
 import { ConfirmButton } from "@/components/confirm-button";
 import { ShiftFields } from "@/components/shift-fields";
-import { assignDirectly, decide, deleteShift, updateShift } from "../../actions";
+import { CopyButton } from "@/components/copy-button";
+import { addToQueue, assignDirectly, decide, deleteShift, moveInQueue, removeFromQueue, sendInvites, updateShift } from "../../actions";
 
 type A = Assignment & { staff: Staff | null };
 
@@ -17,7 +18,7 @@ export default async function ShiftPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; ny?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; ny?: string; inbjudna?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -34,7 +35,11 @@ export default async function ShiftPage({
   const fn = lookups.functions.find((f) => f.id === shift.function_id);
   const assigned = all.filter((x) => x.status === "tilldelad");
   const applicants = all.filter((x) => x.status === "ansokt");
-  const others = all.filter((x) => !["tilldelad", "ansokt"].includes(x.status));
+  const QUEUE = ["vantar", "inbjuden", "avbojd", "utgangen"];
+  const chain = shift.staff_kind === "frilans";
+  const queue = all.filter((x) => QUEUE.includes(x.status)).sort((p, q) => (p.invite_order ?? 999) - (q.invite_order ?? 999));
+  const others = all.filter((x) => !["tilldelad", "ansokt"].includes(x.status) && !(chain && QUEUE.includes(x.status)));
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://fcc-bokning.vercel.app";
   const hours = shiftHours(shift);
   const cost = assigned.reduce((sum, x) => sum + hours * rateFor(shift, x.staff, fn), 0);
 
@@ -138,6 +143,84 @@ export default async function ShiftPage({
           </p>
         )}
       </section>
+
+      {chain && (
+        <section id="inbjudningar" className="card p-5 grid gap-4 scroll-mt-28">
+          <div>
+            <h2 className="text-lg font-semibold">Inbjudningar</h2>
+            <p className="text-sm text-muted">
+              Lägg personerna i den ordning de ska tillfrågas. De första får frågan, och svarar någon nej eller inte inom {shift.respond_hours ?? 24} h går frågan
+              vidare till nästa tills passet är fullt.
+            </p>
+          </div>
+          {sp.inbjudna && <p className="rounded-lg bg-st-genomford-soft px-4 py-2 text-sm text-ok">{sp.inbjudna === "0" ? "Ingen ny att fråga just nu." : `${sp.inbjudna} ${sp.inbjudna === "1" ? "person har" : "personer har"} fått frågan.`}</p>}
+          {queue.length > 0 ? (
+            <ol className="divide-y divide-line rounded-lg border border-line">
+              {queue.map((x, i) => {
+                const link = `${site}/pass/${x.staff?.link_token}`;
+                const sms = `Hej! Vi undrar om du kan jobba som ${fn?.name?.toLowerCase()} ${fmtDate(shift.starts_at)} ${fmtTime(shift.starts_at)}–${fmtTime(shift.ends_at)}. Svara här: ${link}`;
+                const tone =
+                  x.status === "inbjuden" ? "bg-st-preliminar-soft text-st-preliminar" : x.status === "vantar" ? "bg-sunk text-muted" : "bg-warn-soft text-warn";
+                return (
+                  <li key={x.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                    <span className="w-6 text-sm text-muted tabular-nums">{i + 1}.</span>
+                    <Link href={`/personal/personer/${x.staff_id}`} className="font-medium hover:underline">{x.staff?.name}</Link>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>
+                      {ASSIGNMENT_LABEL[x.status]}
+                      {x.status === "inbjuden" && x.respond_by ? ` · svar senast ${fmtDate(x.respond_by)} ${fmtTime(x.respond_by)}` : ""}
+                    </span>
+                    {manager && (
+                      <span className="ml-auto flex flex-wrap items-center gap-1">
+                        {x.status === "inbjuden" && (
+                          <>
+                            <CopyButton text={sms} label="Kopiera sms-text" />
+                            {x.staff?.email && (
+                              <a className="btn btn-ghost text-sm" href={`mailto:${x.staff.email}?subject=${encodeURIComponent(`Förfrågan: ${fn?.name} ${fmtDate(shift.starts_at)}`)}&body=${encodeURIComponent(sms)}`}>E-post</a>
+                            )}
+                          </>
+                        )}
+                        {x.status === "vantar" && (
+                          <>
+                            <form action={moveInQueue.bind(null, id, x.id, -1)}><button className="btn btn-ghost px-2 text-sm" type="submit" aria-label="Flytta upp">↑</button></form>
+                            <form action={moveInQueue.bind(null, id, x.id, 1)}><button className="btn btn-ghost px-2 text-sm" type="submit" aria-label="Flytta ner">↓</button></form>
+                          </>
+                        )}
+                        {x.status !== "inbjuden" && (
+                          <form action={removeFromQueue.bind(null, id, x.id)}><button className="btn btn-ghost px-2 text-sm text-warn" type="submit" aria-label={`Ta bort ${x.staff?.name}`}>✕</button></form>
+                        )}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="text-sm text-muted">Ingen i kön ännu.</p>
+          )}
+          {manager && (
+            <div className="flex flex-wrap items-end gap-3">
+              <form action={addToQueue.bind(null, id)} className="flex flex-wrap items-end gap-2">
+                <div className="field min-w-64">
+                  <label className="label" htmlFor="queue-staff">Lägg till i kön</label>
+                  <select className="input" id="queue-staff" name="staff_id" defaultValue="">
+                    <option value="" disabled>{candidates.length ? "Välj frilansare" : `Ingen frilansare med funktionen ${fn?.name}`}</option>
+                    {candidates.filter((c) => !queue.some((q) => q.staff_id === c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <button className="btn" type="submit">Lägg till</button>
+              </form>
+              {queue.some((q) => q.status === "vantar") && !full && (
+                <form action={sendInvites.bind(null, id)}>
+                  <button className="btn btn-primary" type="submit">Skicka frågan</button>
+                </form>
+              )}
+            </div>
+          )}
+          <p className="text-xs text-muted">
+            Inbjudningarna läggs i e-postkön och skickas automatiskt när e-post är kopplat. Tills dess kan du skicka länken med sms eller e-post härifrån.
+          </p>
+        </section>
+      )}
 
       <form action={updateShift.bind(null, id)} className="card p-5 grid gap-4">
         <h2 className="text-lg font-semibold">Uppgifter</h2>

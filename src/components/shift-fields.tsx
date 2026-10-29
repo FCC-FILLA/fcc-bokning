@@ -102,10 +102,14 @@ export function ShiftFields({
             <input className="input text-right" id="hourly_rate" name="hourly_rate" inputMode="decimal" defaultValue={shift?.hourly_rate ?? ""} placeholder="Funktionens" />
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
+        <div className="grid gap-3 sm:grid-cols-[1fr_160px_160px]">
           <div className="field">
             <label className="label" htmlFor="note">Anteckning till personalen</label>
             <input className="input" id="note" name="note" defaultValue={shift?.note ?? ""} placeholder="T.ex. samling vid personalingången" />
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="respond_hours">Svarstid frilans (h)</label>
+            <input className="input text-right" id="respond_hours" name="respond_hours" type="number" min={1} max={336} defaultValue={shift?.respond_hours ?? 24} />
           </div>
           {allowDays && (
             <div className="field">
