@@ -52,9 +52,10 @@ export function quoteTotals(lines: CalcLine[]) {
   };
 }
 
-const kr = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-/** "12 345 kr" */
+const whole = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 0 });
+const cents = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** "12 345 kr", eller med två decimaler om det finns ören: "68 962,50 kr". */
 export function fmtKr(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return "–";
-  return `${kr.format(n)} kr`;
+  return `${(Number.isInteger(Math.round(n * 100) / 100) ? whole : cents).format(n)} kr`;
 }

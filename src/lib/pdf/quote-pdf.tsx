@@ -246,5 +246,5 @@ export async function fetchPdfImages(doc: QuoteDoc, origin: string): Promise<Pdf
 
 export function pdfFileName(doc: QuoteDoc) {
   const safe = doc.title.normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 60);
-  return `Offert-${doc.number}${safe ? `-${safe}` : ""}.pdf`;
+  return `${strings(doc.language).quote}-${doc.number}${safe ? `-${safe}` : ""}.pdf`;
 }

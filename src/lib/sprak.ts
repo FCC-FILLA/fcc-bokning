@@ -193,13 +193,14 @@ export function period(first: string, last: string, lang: Lang) {
     : `${longDate(first, lang)} – ${longDate(last, lang)}`;
 }
 
-const SEK_SV = new Intl.NumberFormat("sv-SE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-const SEK_EN = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const fmt = (locale: string, n: number) =>
+  // Hela kronor utan decimaler, annars alltid två (68 962,50 kr, inte 68 962,5 kr).
+  n.toLocaleString(locale, Number.isInteger(Math.round(n * 100) / 100) ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** "12 500 kr" / "SEK 12,500" */
 export function money(n: number | null | undefined, lang: Lang) {
   if (n == null || Number.isNaN(n)) return "–";
-  return lang === "en" ? `SEK ${SEK_EN.format(n)}` : `${SEK_SV.format(n)} kr`;
+  return lang === "en" ? `SEK ${fmt("en-GB", n)}` : `${fmt("sv-SE", n)} kr`;
 }
 
 export const num = (n: number, lang: Lang) => n.toLocaleString(lang === "en" ? "en-GB" : "sv-SE");
