@@ -1,6 +1,6 @@
 // Typer som speglar databasschemat i supabase/migrations.
 
-export type AppRole = "admin" | "bokare" | "produktion" | "lasare";
+export type AppRole = "admin" | "bokare" | "produktion" | "lasare" | "personal";
 export type EventStatus = "forfragan" | "preliminar" | "bekraftad" | "genomford" | "avbokad";
 
 export const STATUS_LABEL: Record<EventStatus, string> = {
@@ -17,6 +17,7 @@ export const ROLE_LABEL: Record<AppRole, string> = {
   bokare: "Bokare",
   produktion: "Produktion",
   lasare: "Läsbehörighet",
+  personal: "Personal",
 };
 
 export type Profile = { id: string; full_name: string; email: string | null; role: AppRole; active: boolean };

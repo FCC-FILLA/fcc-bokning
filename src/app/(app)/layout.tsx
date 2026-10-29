@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { isAdmin, requireProfile } from "@/lib/auth";
+import { headers } from "next/headers";
+import { isAdmin, isStaffOnly, requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_LABEL } from "@/lib/types";
 import { Nav, SubNav } from "@/components/nav";
@@ -14,6 +15,20 @@ async function signOut() {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireProfile();
+  // Internpersonal ser bara sin portal (och kan byta lösenord).
+  if (isStaffOnly(profile)) {
+    if (!((await headers()).get("x-pathname") ?? "").startsWith("/konto")) redirect("/portal");
+    return (
+      <div className="min-h-dvh">
+        <header className="bg-brand text-white print:hidden">
+          <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-4">
+            <Link href="/portal" className="font-display font-semibold">← Mina pass</Link>
+          </div>
+        </header>
+        <main className="mx-auto max-w-3xl px-4 py-6 grid gap-5">{children}</main>
+      </div>
+    );
+  }
   const supabase = await createClient();
   const { data: conflicts } = await supabase
     .from("booking_conflicts")

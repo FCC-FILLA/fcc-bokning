@@ -3,9 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Förnyar inloggningen vid varje sidladdning och skickar utloggade till inloggningssidan.
 // Kundens offertlänkar (/offert/...) är öppna utan inloggning.
-const PUBLIC_PATHS = ["/logga-in", "/auth/confirm", "/offert/", "/kalender/"];
+const PUBLIC_PATHS = ["/logga-in", "/auth/confirm", "/offert/", "/kalender/", "/pass/"];
 
 export async function proxy(request: NextRequest) {
+  // Sidans adress, så att layouter kan veta var användaren är (t.ex. för att styra personal till portalen).
+  request.headers.set("x-pathname", request.nextUrl.pathname);
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

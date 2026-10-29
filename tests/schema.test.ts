@@ -374,3 +374,94 @@ describe("offert på engelska", () => {
     }
   });
 });
+
+describe("personal", () => {
+  const ANNA = "00000000-0000-0000-0000-0000000000c1";
+
+  it("ny inloggning med internpersonalens e-post blir rollen personal och kopplas ihop", async () => {
+    await db.exec(`
+      insert into staff (name, email, kind) values ('Anna Garderob', 'anna@exempel.se', 'intern');
+      insert into staff_skills select s.id, f.id from staff s, staff_functions f where s.email = 'anna@exempel.se' and f.name = 'Garderob';
+      insert into auth.users (id, email) values ('${ANNA}', 'Anna@Exempel.se');
+    `);
+    const r = await db.query<{ role: string; linked: boolean }>(
+      `select p.role, exists (select 1 from staff where profile_id = p.id) as linked from profiles p where p.id = '${ANNA}'`,
+    );
+    expect(r.rows[0]).toEqual({ role: "personal", linked: true });
+  });
+
+  it("personal ser inte evenemang, kunder eller offerter", async () => {
+    await asUser(ANNA, async () => {
+      for (const t of ["events", "bookings", "companies", "quotes", "shifts", "shift_assignments"]) {
+        const r = await db.query<{ n: number }>(`select count(*)::int as n from ${t}`);
+        expect(r.rows[0].n, t).toBe(0);
+      }
+      const own = await db.query<{ name: string }>("select name from staff");
+      expect(own.rows.map((x) => x.name)).toEqual(["Anna Garderob"]);
+    });
+  });
+
+  it("ser lediga pass i sina funktioner, kan söka och dra tillbaka, men inte söka fel funktion", async () => {
+    const ev = await book("Gala", "bekraftad", "Stora salen, hela", "2027-06-01T16:00+02", "2027-06-01T23:00+02");
+    const mk = async (fn: string, status = "oppen") =>
+      (
+        await db.query<{ id: string }>(
+          `insert into shifts (event_id, function_id, starts_at, ends_at, needed, status)
+           values ($1, (select id from staff_functions where name = $2), '2027-06-01T15:00+02', '2027-06-01T23:30+02', 4, $3::shift_status) returning id`,
+          [ev, fn, status],
+        )
+      ).rows[0].id;
+    const garderob = await mk("Garderob");
+    const kiosk = await mk("Kiosk");
+    await mk("Garderob", "utkast");
+
+    await asUser(ANNA, async () => {
+      const list = await db.query<{ s: { id: string; function: string; event: string; my_status: string | null }[] }>("select portal_shifts() as s");
+      expect(list.rows[0].s.map((x) => x.id)).toEqual([garderob]);
+      expect(list.rows[0].s[0]).toMatchObject({ function: "Garderob", event: "Gala", my_status: null });
+
+      expect((await db.query<{ r: string }>("select portal_apply($1) as r", [garderob])).rows[0].r).toBe("ok");
+      expect((await db.query<{ r: string }>("select portal_apply($1) as r", [kiosk])).rows[0].r).toBe("fel_funktion");
+      const after = await db.query<{ s: { my_status: string }[] }>("select portal_shifts() as s");
+      expect(after.rows[0].s[0].my_status).toBe("ansokt");
+      expect((await db.query<{ r: string }>("select portal_withdraw($1) as r", [garderob])).rows[0].r).toBe("ok");
+      // Personal kan inte tilldela sig själv direkt.
+      await expect(db.query("update shift_assignments set status = 'tilldelad'")).resolves.toMatchObject({ affectedRows: 0 });
+    });
+  });
+
+  it("läsare kan inte skapa pass, admin kan", async () => {
+    const ins = "insert into shifts (function_id, starts_at, ends_at) values ((select id from staff_functions limit 1), now(), now() + interval '1 hour')";
+    await asUser(LASARE, async () => {
+      await expect(db.query(ins)).rejects.toThrow();
+    });
+    await asUser(ADMIN, async () => {
+      await expect(db.query(ins)).resolves.toBeTruthy();
+    });
+  });
+});
+
+describe("personlig länk", () => {
+  it("visar leverantörens bokningar utan inloggning, och inget för fel länk", async () => {
+    const s = await db.query<{ id: string; link_token: string }>(
+      "insert into staff (name, company, kind) values ('Kim', 'Städbolaget AB', 'leverantor') returning id, link_token",
+    );
+    await db.query(
+      `insert into shifts (function_id, supplier_id, staff_kind, starts_at, ends_at, needed)
+       values ((select id from staff_functions where name = 'Städ'), $1, 'leverantor', now() + interval '1 day', now() + interval '1 day 4 hours', 3)`,
+      [s.rows[0].id],
+    );
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ d: { company: string; shifts: { function: string; needed: number }[] } }>("select link_shifts($1) as d", [s.rows[0].link_token]);
+      expect(r.rows[0].d.company).toBe("Städbolaget AB");
+      expect(r.rows[0].d.shifts).toHaveLength(1);
+      expect(r.rows[0].d.shifts[0]).toMatchObject({ function: "Städ", needed: 3 });
+      const none = await db.query<{ d: unknown }>("select link_shifts(gen_random_uuid()) as d");
+      expect(none.rows[0].d).toBeNull();
+      await expect(db.query("select * from staff")).rejects.toThrow();
+    } finally {
+      await db.exec("reset role");
+    }
+  });
+});

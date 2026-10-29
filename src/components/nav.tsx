@@ -30,6 +30,16 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    id: "personal",
+    label: "Personal",
+    href: "/personal",
+    items: [
+      { href: "/personal", label: "Pass" },
+      { href: "/personal/personer", label: "Personer" },
+      { href: "/personal/funktioner", label: "Funktioner" },
+    ],
+  },
+  {
     id: "forsaljning",
     label: "Försäljning",
     href: "/offerter",

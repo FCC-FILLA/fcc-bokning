@@ -13,6 +13,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { EventFields } from "@/components/event-fields";
 import { History } from "@/components/history";
 import { StatusPill } from "@/components/status-pill";
+import { EventStaffing } from "@/components/event-staffing";
 import { saveEventAsTemplate } from "../../mallar/actions";
 import {
   addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, updateBooking, updateEvent,
@@ -25,7 +26,7 @@ export default async function EventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -223,6 +224,8 @@ export default async function EventPage({
           </details>
         )}
       </section>
+
+      <EventStaffing eventId={id} firstDate={firstDate} created={sp.passskapat} />
 
       {/* Offerter */}
       <section className="card p-5 grid gap-3">

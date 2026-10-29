@@ -11,8 +11,9 @@ const ROLES = Object.keys(ROLE_LABEL) as AppRole[];
 const ROLE_HELP: Record<AppRole, string> = {
   admin: "Allt, inklusive prislista, lokaler och användare",
   bokare: "Skapar och ändrar evenemang, kunder och offerter",
-  produktion: "Läser allt, ändrar inget (för teknik och värdar)",
+  produktion: "Läser allt, planerar personal och attesterar tid",
   lasare: "Läser allt, ändrar inget",
+  personal: "Internpersonal: ser bara sin personalportal (pass och tid)",
 };
 
 async function updateUser(id: string, fd: FormData) {

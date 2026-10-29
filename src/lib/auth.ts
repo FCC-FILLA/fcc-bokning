@@ -28,3 +28,13 @@ export async function requireBooker(): Promise<Profile> {
   if (!canBook(p)) throw new Error("Du har inte behörighet att ändra bokningar.");
   return p;
 }
+
+/** Får planera pass, godkänna sökande och attestera tid. */
+export const canManageStaff = (p: Profile | null) => !!p && p.active && (p.role === "admin" || p.role === "bokare" || p.role === "produktion");
+export const isStaffOnly = (p: Profile | null) => !!p && p.role === "personal";
+
+export async function requireStaffManager(): Promise<Profile> {
+  const p = await requireProfile();
+  if (!canManageStaff(p)) throw new Error("Du har inte behörighet att planera personal.");
+  return p;
+}
