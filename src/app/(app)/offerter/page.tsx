@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SortTh, parseSort, sortRows } from "@/components/sort-th";
 import { canBook, getProfile } from "@/lib/auth";
 import { fmtDate } from "@/lib/datum";
 import { QUOTE_STATUS_LABEL, fmtKr, type QuoteStatus } from "@/lib/offert";
@@ -9,7 +10,7 @@ export const metadata = { title: "Offerter" };
 
 const STATUSES = Object.keys(QUOTE_STATUS_LABEL) as QuoteStatus[];
 
-export default async function QuotesPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
+export default async function QuotesPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string; sort?: string; ordning?: string }> }) {
   const sp = await searchParams;
   const status = STATUSES.includes(sp.status as QuoteStatus) ? (sp.status as QuoteStatus) : "";
   const q = (sp.q ?? "").trim().replace(/[%,()]/g, "");
@@ -20,7 +21,16 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
   if (status) query = query.eq("status", status);
   if (q) query = query.or(`title.ilike.%${q}%,company_name.ilike.%${q}%`);
   const { data } = await query;
-  const quotes = (data ?? []) as QuoteOverview[];
+  const sort = parseSort(sp, ["nr", "offert", "kund", "varde", "giltig", "status"], { col: "nr", asc: false });
+  const quotes = sortRows((data ?? []) as QuoteOverview[], sort, {
+    nr: (x) => x.number,
+    offert: (x) => x.title,
+    kund: (x) => x.company_name,
+    varde: (x) => Number(x.total_ex_vat),
+    giltig: (x) => x.valid_until,
+    status: (x) => x.status,
+  });
+  const href = (extra: string) => `/offerter?${[status && `status=${status}`, q && `q=${encodeURIComponent(q)}`, extra].filter(Boolean).join("&")}`;
 
   const { data: all } = await supabase.from("quote_overview").select("status, total_ex_vat");
   const sums = STATUSES.map((s) => {
@@ -69,7 +79,14 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
         <div className="card overflow-x-auto">
           <table className="table min-w-[820px]">
             <thead>
-              <tr><th>Nr</th><th>Offert</th><th>Kund</th><th className="text-right">Värde exkl. moms</th><th>Giltig till</th><th>Status</th></tr>
+              <tr>
+                <SortTh col="nr" label="Nr" sort={sort} href={href} />
+                <SortTh col="offert" label="Offert" sort={sort} href={href} />
+                <SortTh col="kund" label="Kund" sort={sort} href={href} />
+                <SortTh col="varde" label="Värde exkl. moms" sort={sort} href={href} className="text-right" />
+                <SortTh col="giltig" label="Giltig till" sort={sort} href={href} />
+                <SortTh col="status" label="Status" sort={sort} href={href} />
+              </tr>
             </thead>
             <tbody>
               {quotes.map((x) => (

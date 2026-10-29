@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireBooker } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { lookupOrg } from "@/lib/bolagsverket";
 
 const opt = (v: FormDataEntryValue | null) => {
   const s = typeof v === "string" ? v.trim() : "";
@@ -26,6 +27,18 @@ function readCompany(fd: FormData) {
     })(),
     commission_to: opt(fd.get("commission_to")),
     commission_note: opt(fd.get("commission_note")),
+    address: opt(fd.get("address")),
+    postal_code: opt(fd.get("postal_code")),
+    city: opt(fd.get("city")),
+    country: opt(fd.get("country")),
+    website: opt(fd.get("website")),
+    invoice_email: opt(fd.get("invoice_email")),
+    categories: [
+      ...new Set([
+        ...fd.getAll("categories").map(String),
+        ...String(fd.get("new_category") ?? "").split(",").map((x) => x.trim()).filter(Boolean),
+      ]),
+    ].slice(0, 20),
   };
 }
 
@@ -81,4 +94,10 @@ export async function deleteContact(companyId: string, contactId: string) {
   await supabase.from("contacts").delete().eq("id", contactId).eq("company_id", companyId);
   revalidatePath(`/kunder/${companyId}`);
   redirect(`/kunder/${companyId}#kontakter`);
+}
+
+/** Hämtar namn och adress från Bolagsverket (anropas från formuläret). */
+export async function lookupOrgNr(orgNr: string) {
+  await requireBooker();
+  return lookupOrg(orgNr);
 }

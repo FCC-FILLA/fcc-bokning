@@ -51,6 +51,13 @@ export type Company = {
   commission_pct?: number | null;
   commission_to?: string | null;
   commission_note?: string | null;
+  address?: string | null;
+  postal_code?: string | null;
+  city?: string | null;
+  country?: string | null;
+  website?: string | null;
+  invoice_email?: string | null;
+  categories?: string[];
 };
 
 export type Contact = {

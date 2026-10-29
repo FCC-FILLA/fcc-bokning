@@ -1,5 +1,6 @@
 import { loadOptionPlaces, optionOrdinal } from "@/lib/bokning";
 import Link from "next/link";
+import { SortTh, parseSort, sortRows } from "@/components/sort-th";
 import { canBook, getProfile } from "@/lib/auth";
 import { fmtRange } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
@@ -13,7 +14,7 @@ const PERIODS = { kommande: "Kommande", tidigare: "Tidigare", alla: "Alla" } as 
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; q?: string; period?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; period?: string; sort?: string; ordning?: string }>;
 }) {
   const sp = await searchParams;
   const period = (sp.period && sp.period in PERIODS ? sp.period : "kommande") as keyof typeof PERIODS;
@@ -32,7 +33,15 @@ export default async function EventsPage({
   else query = query.order("starts_at", { ascending: false });
 
   const { data } = await query.limit(300);
-  const events = (data ?? []) as EventOverview[];
+  const sort = parseSort(sp, ["namn", "kund", "tid", "bokningar", "status"], { col: "tid", asc: period !== "tidigare" });
+  const events = sortRows((data ?? []) as EventOverview[], sort, {
+    namn: (e) => e.title,
+    kund: (e) => e.company_name,
+    tid: (e) => e.starts_at,
+    bokningar: (e) => e.booking_count,
+    status: (e) => ["forfragan", "preliminar", "bekraftad", "genomford", "avbokad"].indexOf(e.status),
+  });
+  const href = (extra: string) => `/evenemang?${[status && `status=${status}`, q && `q=${encodeURIComponent(q)}`, `period=${period}`, extra].filter(Boolean).join("&")}`;
   const optionPlace = await loadOptionPlaces(supabase, events.filter((e) => e.status === "forfragan" || e.status === "preliminar").map((e) => e.id));
 
   return (
@@ -73,11 +82,11 @@ export default async function EventsPage({
           <table className="table min-w-[760px]">
             <thead>
               <tr>
-                <th>Evenemang</th>
-                <th>Kund</th>
-                <th>Tid</th>
-                <th>Bokningar</th>
-                <th>Status</th>
+                <SortTh col="namn" label="Evenemang" sort={sort} href={href} />
+                <SortTh col="kund" label="Kund" sort={sort} href={href} />
+                <SortTh col="tid" label="Tid" sort={sort} href={href} />
+                <SortTh col="bokningar" label="Bokningar" sort={sort} href={href} />
+                <SortTh col="status" label="Status" sort={sort} href={href} />
               </tr>
             </thead>
             <tbody>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SortTh, parseSort, sortRows } from "@/components/sort-th";
 import { canManageStaff, requireProfile } from "@/lib/auth";
 import { fmtKr } from "@/lib/offert";
 import { KIND_LABEL, type Staff, type StaffKind } from "@/lib/personal";
@@ -10,7 +11,7 @@ export const metadata = { title: "Personer" };
 
 type Row = Staff & { staff_skills: { function_id: string }[] };
 
-export default async function StaffPage({ searchParams }: { searchParams: Promise<{ typ?: string; q?: string; fel?: string; inaktiva?: string }> }) {
+export default async function StaffPage({ searchParams }: { searchParams: Promise<{ typ?: string; q?: string; fel?: string; inaktiva?: string; sort?: string; ordning?: string }> }) {
   const sp = await searchParams;
   const manager = canManageStaff(await requireProfile());
   const kind = (["intern", "frilans", "leverantor"] as StaffKind[]).includes(sp.typ as StaffKind) ? (sp.typ as StaffKind) : null;
@@ -21,9 +22,13 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
   if (!sp.inaktiva) q = q.eq("active", true);
   const { data } = await q;
   const needle = (sp.q ?? "").trim().toLowerCase();
-  const people = ((data ?? []) as Row[]).filter(
-    (p) => !needle || [p.name, p.email, p.company, p.phone].some((v) => v?.toLowerCase().includes(needle)),
+  const sort = parseSort(sp, ["namn", "typ", "timpris"], { col: "namn", asc: true });
+  const people = sortRows(
+    ((data ?? []) as Row[]).filter((p) => !needle || [p.name, p.email, p.company, p.phone].some((v) => v?.toLowerCase().includes(needle))),
+    sort,
+    { namn: (p) => p.name, typ: (p) => p.kind, timpris: (p) => (p.hourly_rate == null ? null : Number(p.hourly_rate)) },
   );
+  const href = (extra: string) => `/personal/personer?${[kind && `typ=${kind}`, sp.q && `q=${encodeURIComponent(sp.q)}`, sp.inaktiva && "inaktiva=1", extra].filter(Boolean).join("&")}`;
   const fnName = new Map(functions.map((f) => [f.id, f]));
 
   return (
@@ -60,7 +65,14 @@ export default async function StaffPage({ searchParams }: { searchParams: Promis
       <div className="card overflow-x-auto">
         <table className="table min-w-[820px]">
           <thead>
-            <tr><th>Namn</th><th>Typ</th><th>Funktioner</th><th>Kontakt</th><th className="text-right">Timpris</th><th>Portal</th></tr>
+            <tr>
+              <SortTh col="namn" label="Namn" sort={sort} href={href} />
+              <SortTh col="typ" label="Typ" sort={sort} href={href} />
+              <th>Funktioner</th>
+              <th>Kontakt</th>
+              <SortTh col="timpris" label="Timpris" sort={sort} href={href} className="text-right" />
+              <th>Portal</th>
+            </tr>
           </thead>
           <tbody>
             {people.map((p) => (
