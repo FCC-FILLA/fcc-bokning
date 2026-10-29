@@ -25,11 +25,12 @@ function shiftMonth(ym: string, n: number) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-export default async function MonthPage({ searchParams }: { searchParams: Promise<{ m?: string; avbokade?: string }> }) {
+export default async function MonthPage({ searchParams }: { searchParams: Promise<{ m?: string; avbokade?: string; personal?: string }> }) {
   const sp = await searchParams;
   const today = todayDate();
   const ym = /^\d{4}-\d{2}$/.test(sp.m ?? "") ? sp.m! : today.slice(0, 7);
   const showCancelled = sp.avbokade === "1";
+  const showStaff = sp.personal === "1";
   const first = `${ym}-01`;
   const gridStart = mondayOf(first);
   const nextMonthFirst = `${shiftMonth(ym, 1)}-01`;
@@ -46,6 +47,25 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
     .gt("ends_at", dayStartIso(gridStart))
     .order("starts_at");
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => showCancelled || r.events.status !== "avbokad");
+
+  // Personal per dag: tillsatta av behövda platser.
+  const staffPerDay = new Map<string, { filled: number; needed: number; shifts: number }>();
+  if (showStaff) {
+    const { data: sh } = await supabase
+      .from("shifts")
+      .select("starts_at, needed, shift_assignments(status)")
+      .lt("starts_at", dayStartIso(gridEnd))
+      .gte("starts_at", dayStartIso(gridStart))
+      .neq("status", "utkast");
+    for (const x of (sh ?? []) as { starts_at: string; needed: number; shift_assignments: { status: string }[] }[]) {
+      const d = isoToDate(x.starts_at);
+      const cur = staffPerDay.get(d) ?? { filled: 0, needed: 0, shifts: 0 };
+      cur.needed += x.needed;
+      cur.filled += Math.min(x.needed, x.shift_assignments.filter((a) => a.status === "tilldelad").length);
+      cur.shifts++;
+      staffPerDay.set(d, cur);
+    }
+  }
 
   // Ett evenemang per dag, med tidigaste starttid och antal lokaler den dagen.
   const perDay = new Map<string, Map<string, DayEvent>>();
@@ -66,7 +86,8 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
   }
 
   const [y, mo] = ym.split("-").map(Number);
-  const q = (m: string) => `/manad?m=${m}${showCancelled ? "&avbokade=1" : ""}`;
+  const q = (m: string, o: { avbokade?: boolean; personal?: boolean } = {}) =>
+    `/manad?m=${m}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}`;
   const MAX = 4;
 
   return (
@@ -77,10 +98,13 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
         <Link className="btn" href={q(shiftMonth(ym, 1))} aria-label="Nästa månad">→</Link>
         <h1 className="text-2xl font-semibold capitalize">{MONTHS[mo - 1]} {y}</h1>
         <span className="flex-1" />
-        <Link className="text-sm text-muted underline-offset-2 hover:underline" href={`/manad?m=${ym}${showCancelled ? "" : "&avbokade=1"}`}>
+        <Link className="text-sm text-muted underline-offset-2 hover:underline" href={q(ym, { avbokade: !showCancelled })}>
           {showCancelled ? "Dölj avbokade" : "Visa avbokade"}
         </Link>
-        <Link className="btn" href={`/vecka?vecka=${mondayOf(ym === today.slice(0, 7) ? today : first)}`}>Veckovy</Link>
+        <Link className={`btn ${showStaff ? "btn-primary" : ""}`} href={q(ym, { personal: !showStaff })} aria-pressed={showStaff}>
+          {showStaff ? "Dölj personal" : "Visa personal"}
+        </Link>
+        <Link className="btn" href={`/vecka?vecka=${mondayOf(ym === today.slice(0, 7) ? today : first)}${showStaff ? "&personal=1" : ""}`}>Veckovy</Link>
         {canBook(profile) && <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>}
       </div>
 
@@ -129,6 +153,20 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
                       <span className="font-mono font-normal opacity-80">{e.start}</span> {e.title}
                     </Link>
                   ))}
+                  {staffPerDay.get(d) && (() => {
+                    const st = staffPerDay.get(d)!;
+                    const full = st.filled >= st.needed;
+                    return (
+                      <Link
+                        href={`/personal?fran=${d}&dagar=7`}
+                        title={`${st.shifts} pass · ${st.filled} av ${st.needed} platser tillsatta`}
+                        className={`flex justify-between rounded px-1.5 py-0.5 text-[11px] ${full ? "bg-sunk text-muted" : "bg-st-preliminar-soft text-st-preliminar"}`}
+                      >
+                        <span>Personal</span>
+                        <span className="font-semibold tabular-nums">{st.filled}/{st.needed}</span>
+                      </Link>
+                    );
+                  })()}
                   {list.length > MAX && (
                     <Link href={`/vecka?vecka=${mondayOf(d)}`} className="text-xs text-muted hover:underline px-1">
                       +{list.length - MAX} till

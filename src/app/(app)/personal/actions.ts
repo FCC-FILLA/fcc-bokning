@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStaffManager } from "@/lib/auth";
 import { addDays, localToIso } from "@/lib/datum";
+import { notify, shiftLabel } from "@/lib/push";
 import { createClient } from "@/lib/supabase/server";
 
 const opt = (v: FormDataEntryValue | null) => {
@@ -76,6 +77,14 @@ export async function createShift(fd: FormData) {
   }));
   const { data, error } = await supabase.from("shifts").insert(rows).select("id");
   if (error || !data?.length) fail(back, "Det gick inte att skapa passet.");
+  if (shift.status === "oppen" && shift.staff_kind === "intern") {
+    const { text } = await shiftLabel(supabase, data![0].id);
+    await notify(
+      supabase,
+      { functionId: shift.function_id },
+      { title: data!.length > 1 ? `${data!.length} nya pass att söka` : "Nytt pass att söka", body: text, url: "/portal?flik=lediga", tag: `nytt-${data![0].id}` },
+    );
+  }
   refresh(back, ...(shift.event_id ? [`/evenemang/${shift.event_id}`] : []));
   if (fd.get("open_after") === "1" && data!.length === 1) redirect(`/personal/pass/${data![0].id}?ny=1`);
   redirect(`${back}${back.includes("?") ? "&" : "?"}passskapat=${data!.length}#bemanning`);
@@ -113,9 +122,20 @@ export async function decide(shiftId: string, staffId: string, status: "tilldela
     ]);
     if (sh && (count ?? 0) >= sh.needed) fail(back, "Passet är redan fullt. Öka antalet om fler ska med.");
   }
-  await supabase
+  const { error } = await supabase
     .from("shift_assignments")
     .upsert({ shift_id: shiftId, staff_id: staffId, status, decided_by: me.id, decided_at: new Date().toISOString() }, { onConflict: "shift_id,staff_id" });
+  if (error) fail(back, error.message.includes("låst") ? "Månaden är låst." : "Det gick inte att spara.");
+  if (status !== "nekad") {
+    const { text } = await shiftLabel(supabase, shiftId);
+    await notify(
+      supabase,
+      { staff: [staffId] },
+      status === "tilldelad"
+        ? { title: "Du har fått ett pass", body: text, url: "/portal?flik=mina", tag: `pass-${shiftId}` }
+        : { title: "Du är borttagen från ett pass", body: text, url: "/portal?flik=mina", tag: `pass-${shiftId}` },
+    );
+  }
   refresh(back);
   redirect(`${back}#personer`);
 }

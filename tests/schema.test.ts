@@ -465,3 +465,73 @@ describe("personlig länk", () => {
     }
   });
 });
+
+describe("tidrapport och attest", () => {
+  const ANNA = "00000000-0000-0000-0000-0000000000c1";
+  let shiftId = "";
+
+  it("personal rapporterar tid på ett eget, påbörjat pass", async () => {
+    const r = await db.query<{ id: string }>(
+      `insert into shifts (function_id, starts_at, ends_at) values
+       ((select id from staff_functions where name = 'Garderob'), '2026-09-12T16:00+02', '2026-09-12T23:00+02') returning id`,
+    );
+    shiftId = r.rows[0].id;
+    await db.query(
+      "insert into shift_assignments (shift_id, staff_id, status) values ($1, (select id from staff where email = 'anna@exempel.se'), 'tilldelad')",
+      [shiftId],
+    );
+    await asUser(ANNA, async () => {
+      const bad = await db.query<{ r: string }>("select portal_report_time($1, '2026-09-12T23:00+02', '2026-09-12T16:00+02', 0, null) as r", [shiftId]);
+      expect(bad.rows[0].r).toBe("ogiltig_tid");
+      const ok = await db.query<{ r: string }>("select portal_report_time($1, '2026-09-12T15:45+02', '2026-09-12T23:30+02', 30, 'Stannade kvar') as r", [shiftId]);
+      expect(ok.rows[0].r).toBe("ok");
+      const list = await db.query<{ s: { id: string; attest_status: string; break_minutes: number }[] }>("select portal_shifts() as s");
+      expect(list.rows[0].s.find((x) => x.id === shiftId)).toMatchObject({ attest_status: "rapporterad", break_minutes: 30 });
+    });
+  });
+
+  it("man kan inte attestera sin egen tid, men en annan planerare kan", async () => {
+    await db.exec(`update profiles set role = 'produktion' where id = '${ANNA}'`);
+    await asUser(ANNA, async () => {
+      await expect(db.query("update shift_assignments set attest_status = 'attesterad' where shift_id = $1", [shiftId])).rejects.toThrow(/egen tid/);
+    });
+    await db.exec(`update profiles set role = 'personal' where id = '${ANNA}'`);
+    await asUser(ADMIN, async () => {
+      await db.query("update shift_assignments set attest_status = 'attesterad' where shift_id = $1", [shiftId]);
+    });
+    const r = await db.query<{ attested_by: string }>("select attested_by from shift_assignments where shift_id = $1", [shiftId]);
+    expect(r.rows[0].attested_by).toBe(ADMIN);
+  });
+
+  it("en låst månad går inte att ändra", async () => {
+    await db.exec("insert into time_periods (month, locked_at) values ('2026-09-01', now())");
+    await expect(db.query("update shift_assignments set break_minutes = 0 where shift_id = $1", [shiftId])).rejects.toThrow(/låst/);
+    await asUser(ANNA, async () => {
+      const r = await db.query<{ r: string }>("select portal_report_time($1, '2026-09-12T16:00+02', '2026-09-12T23:00+02', 0, null) as r", [shiftId]);
+      expect(r.rows[0].r).toBe("attesterad");
+    });
+    await db.exec("update time_periods set locked_at = null where month = '2026-09-01'");
+    await expect(db.query("update shift_assignments set report_comment = 'ok' where shift_id = $1", [shiftId])).resolves.toBeTruthy();
+  });
+});
+
+describe("appnotiser", () => {
+  it("bara planerare kan hämta mottagare, och man ser bara sina egna prenumerationer", async () => {
+    const ANNA = "00000000-0000-0000-0000-0000000000c1";
+    await asUser(ANNA, async () => {
+      await db.query("insert into push_subscriptions (endpoint, p256dh, auth) values ('https://push.example/anna', 'k', 'a')");
+      const own = await db.query<{ n: number }>("select count(*)::int as n from push_subscriptions");
+      expect(own.rows[0].n).toBe(1);
+      const t = await db.query("select * from push_targets(array[(select my_staff_id())])");
+      expect(t.rows).toHaveLength(0);
+    });
+    await asUser(ADMIN, async () => {
+      const mine = await db.query<{ n: number }>("select count(*)::int as n from push_subscriptions");
+      expect(mine.rows[0].n).toBe(0);
+      const byFn = await db.query<{ endpoint: string }>(
+        "select endpoint from push_targets(null, (select id from staff_functions where name = 'Garderob'))",
+      );
+      expect(byFn.rows.map((r) => r.endpoint)).toEqual(["https://push.example/anna"]);
+    });
+  });
+});

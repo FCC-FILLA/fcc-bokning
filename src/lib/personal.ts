@@ -70,3 +70,23 @@ export function staffingSummary(shifts: Pick<Shift, "id" | "function_id" | "need
   }
   return [...out.values()].sort((a, b) => a.fn.sort_order - b.fn.sort_order);
 }
+
+export type AttestStatus = "" | "rapporterad" | "attesterad" | "avvisad";
+export const ATTEST_LABEL: Record<AttestStatus, string> = { "": "Ej rapporterad", rapporterad: "Att attestera", attesterad: "Attesterad", avvisad: "Avvisad" };
+
+/** Arbetade timmar enligt tidrapporten (slut − start − rast), eller null om ingen tid är rapporterad. */
+export function workedHours(a: { actual_start: string | null; actual_end: string | null; break_minutes: number | null }) {
+  if (!a.actual_start || !a.actual_end) return null;
+  const ms = new Date(a.actual_end).getTime() - new Date(a.actual_start).getTime() - (a.break_minutes ?? 0) * 60_000;
+  return Math.max(0, Math.round((ms / 3_600_000) * 100) / 100);
+}
+
+/** "2026-11" → { first: "2026-11-01", next: "2026-12-01" } */
+export function monthRange(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+  return { first: `${month}-01`, next: `${next}-01` };
+}
+
+const MONTHS = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
+export const monthLabel = (month: string) => `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;

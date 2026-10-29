@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { localToIso } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
 
 const MSG: Record<string, string> = {
@@ -30,4 +31,52 @@ export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/logga-in");
+}
+
+const TIME_MSG: Record<string, string> = {
+  ej_tilldelad: "Du har inte det här passet.",
+  for_tidigt: "Tid kan rapporteras när passet har börjat.",
+  attesterad: "Tiden är redan attesterad.",
+  last: "Månaden är låst. Kontakta den som planerar personal.",
+  ogiltig_tid: "Kontrollera tiderna.",
+  ogiltig_rast: "Rasten kan inte vara längre än passet.",
+};
+
+export async function reportTime(shiftId: string, tab: string, fd: FormData) {
+  const date = String(fd.get("date") ?? "");
+  const from = String(fd.get("from") ?? "");
+  const to = String(fd.get("to") ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(from) || !/^\d{2}:\d{2}$/.test(to)) {
+    redirect(`/portal?flik=${tab}&fel=${encodeURIComponent("Ange start och slut.")}`);
+  }
+  const start = localToIso(`${date}T${from}`);
+  let end = localToIso(`${date}T${to}`);
+  if (end <= start) end = new Date(new Date(end).getTime() + 86_400_000).toISOString();
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("portal_report_time", {
+    p_shift: shiftId,
+    p_start: start,
+    p_end: end,
+    p_break: Math.max(0, Math.round(Number(fd.get("break") ?? 0)) || 0),
+    p_comment: String(fd.get("comment") ?? ""),
+  });
+  revalidatePath("/portal");
+  redirect(`/portal?flik=${tab}&${data === "ok" ? "rapporterad=1" : `fel=${encodeURIComponent(TIME_MSG[String(data)] ?? "Något gick fel.")}`}#pass-${shiftId}`);
+}
+
+/** Sparar enhetens notisprenumeration (anropas från PushToggle). */
+export async function savePush(json: string) {
+  const sub = JSON.parse(json) as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+  if (!sub.endpoint?.startsWith("https://") || !sub.keys?.p256dh || !sub.keys?.auth) return;
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const uid = claims?.claims?.sub;
+  if (!uid) return;
+  await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+  await supabase.from("push_subscriptions").insert({ profile_id: uid, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth });
+}
+
+export async function removePush(endpoint: string) {
+  const supabase = await createClient();
+  await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
 }

@@ -21,19 +21,20 @@ type Row = {
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ vecka?: string; avbokade?: string }>;
+  searchParams: Promise<{ vecka?: string; avbokade?: string; personal?: string }>;
 }) {
   const sp = await searchParams;
   const today = todayDate();
   const monday = mondayOf(/^\d{4}-\d{2}-\d{2}$/.test(sp.vecka ?? "") ? sp.vecka! : today);
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const showCancelled = sp.avbokade === "1";
+  const showStaff = sp.personal === "1";
 
   const supabase = await createClient();
   const profile = await getProfile();
   const booker = canBook(profile);
 
-  const [{ data: roomData }, { data: bookingData }] = await Promise.all([
+  const [{ data: roomData }, { data: bookingData }, { data: shiftData }] = await Promise.all([
     supabase.from("rooms").select("*").eq("active", true).eq("bookable", true).order("sort_order"),
     supabase
       .from("bookings")
@@ -41,9 +42,28 @@ export default async function SchedulePage({
       .lt("starts_at", dayStartIso(addDays(monday, 7)))
       .gt("ends_at", dayStartIso(monday))
       .order("starts_at"),
+    showStaff
+      ? supabase
+          .from("shifts")
+          .select("id, starts_at, ends_at, needed, function_id, staff_functions(name, color, sort_order), events(title), shift_assignments(status)")
+          .lt("starts_at", dayStartIso(addDays(monday, 7)))
+          .gt("ends_at", dayStartIso(monday))
+          .neq("status", "utkast")
+          .order("starts_at")
+      : Promise.resolve({ data: [] }),
   ]);
 
   const rooms = (roomData ?? []) as Room[];
+  type ShiftRow = {
+    id: string; starts_at: string; ends_at: string; needed: number; function_id: string;
+    staff_functions: { name: string; color: string; sort_order: number } | null;
+    events: { title: string } | null;
+    shift_assignments: { status: string }[];
+  };
+  const shifts = (shiftData ?? []) as unknown as ShiftRow[];
+  const staffRows = [...new Map(shifts.map((x) => [x.function_id, x.staff_functions])).entries()]
+    .filter((x): x is [string, NonNullable<ShiftRow["staff_functions"]>] => !!x[1])
+    .sort((a, b) => a[1].sort_order - b[1].sort_order);
   const all = (bookingData ?? []) as unknown as Row[];
   const active = all.filter((b) => ["forfragan", "preliminar", "bekraftad"].includes(b.events.status));
   const visible = all.filter((b) => showCancelled || b.events.status !== "avbokad");
@@ -65,7 +85,8 @@ export default async function SchedulePage({
     return `${s}–${e}`;
   };
 
-  const q = (vecka: string) => `/vecka?vecka=${vecka}${showCancelled ? "&avbokade=1" : ""}`;
+  const q = (vecka: string, o: { avbokade?: boolean; personal?: boolean } = {}) =>
+    `/vecka?vecka=${vecka}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}`;
 
   return (
     <>
@@ -78,11 +99,11 @@ export default async function SchedulePage({
           {fmtDayMonth(monday)} – {fmtDayMonth(days[6])} {days[6].slice(0, 4)}
         </span>
         <span className="flex-1" />
-        <Link
-          className="text-sm text-muted underline-offset-2 hover:underline"
-          href={`/vecka?vecka=${monday}${showCancelled ? "" : "&avbokade=1"}`}
-        >
+        <Link className="text-sm text-muted underline-offset-2 hover:underline" href={q(monday, { avbokade: !showCancelled })}>
           {showCancelled ? "Dölj avbokade" : "Visa avbokade"}
+        </Link>
+        <Link className={`btn ${showStaff ? "btn-primary" : ""}`} href={q(monday, { personal: !showStaff })} aria-pressed={showStaff}>
+          {showStaff ? "Dölj personal" : "Visa personal"}
         </Link>
         <Link className="btn" href={`/manad?m=${monday.slice(0, 7)}`}>Månadsvy</Link>
         {booker && <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>}
@@ -185,6 +206,46 @@ export default async function SchedulePage({
                 </tr>
               );
             })}
+            {showStaff && (
+              <tr>
+                <th colSpan={8} className="sticky left-0 bg-surface px-3 pt-4 pb-1 text-left label border-b border-line">
+                  Personal {staffRows.length ? "" : "· inga pass den här veckan"}
+                </th>
+              </tr>
+            )}
+            {showStaff &&
+              staffRows.map(([fnId, fn]) => (
+                <tr key={fnId}>
+                  <th scope="row" className="sticky left-0 z-10 bg-surface px-3 py-1.5 text-left align-top border-b border-line font-normal">
+                    <span className="inline-block size-2.5 rounded-full mr-2" style={{ background: fn.color }} />
+                    {fn.name}
+                  </th>
+                  {days.map((d) => {
+                    const list = shifts.filter((x) => x.function_id === fnId && isoToDate(x.starts_at) === d);
+                    return (
+                      <td key={d} className={`p-1 align-top border-b border-l border-line ${d === today ? "bg-today" : weekday(d) >= 5 ? "bg-sunk/50" : ""}`}>
+                        <div className="grid gap-1">
+                          {list.map((x) => {
+                            const filled = x.shift_assignments.filter((a) => a.status === "tilldelad").length;
+                            const full = filled >= x.needed;
+                            return (
+                              <Link
+                                key={x.id}
+                                href={`/personal/pass/${x.id}`}
+                                title={`${fn.name}${x.events ? ` · ${x.events.title}` : ""} · ${filled} av ${x.needed}`}
+                                className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[11px] leading-tight ${full ? "bg-sunk" : "bg-st-preliminar-soft text-st-preliminar"}`}
+                              >
+                                <span className="font-mono">{fmtTime(x.starts_at)}–{fmtTime(x.ends_at)}</span>
+                                <span className="font-semibold tabular-nums">{filled}/{x.needed}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>

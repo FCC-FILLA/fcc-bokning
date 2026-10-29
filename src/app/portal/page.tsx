@@ -1,11 +1,19 @@
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { requireProfile } from "@/lib/auth";
-import { fmtDate, fmtTime, isoToDate, weekday } from "@/lib/datum";
-import { ASSIGNMENT_LABEL, shiftHours, type AssignmentStatus } from "@/lib/personal";
+import { fmtDate, fmtTime, isoToDate, isoToLocal, weekday } from "@/lib/datum";
+import { ASSIGNMENT_LABEL, ATTEST_LABEL, shiftHours, workedHours, type AssignmentStatus, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
-import { apply, signOut, withdraw } from "./actions";
+import { PushToggle } from "@/components/push-toggle";
+import { apply, removePush, reportTime, savePush, signOut, withdraw } from "./actions";
 
-export const metadata = { title: "Mina pass" };
+export const metadata: Metadata = {
+  title: "Mina pass",
+  manifest: "/manifest.webmanifest",
+  icons: { apple: "/apple-icon.png", icon: "/icon-192.png" },
+  appleWebApp: { capable: true, title: "FCC Personal", statusBarStyle: "default" },
+};
+export const viewport: Viewport = { themeColor: "#60272b" };
 
 type PortalShift = {
   id: string;
@@ -21,6 +29,13 @@ type PortalShift = {
   filled: number;
   my_status: AssignmentStatus | null;
   open: boolean;
+  actual_start: string | null;
+  actual_end: string | null;
+  break_minutes: number | null;
+  report_comment: string | null;
+  attest_status: AttestStatus | null;
+  attest_comment: string | null;
+  locked: boolean;
 };
 
 const TABS = [
@@ -29,7 +44,7 @@ const TABS = [
   { id: "tidigare", label: "Tidigare" },
 ] as const;
 
-export default async function PortalPage({ searchParams }: { searchParams: Promise<{ flik?: string; fel?: string; sokt?: string; aterkallad?: string }> }) {
+export default async function PortalPage({ searchParams }: { searchParams: Promise<{ flik?: string; fel?: string; sokt?: string; aterkallad?: string; rapporterad?: string }> }) {
   const sp = await searchParams;
   const profile = await requireProfile();
   const supabase = await createClient();
@@ -41,9 +56,12 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const now = new Date().toISOString();
   const tab = TABS.some((t) => t.id === sp.flik) ? (sp.flik as (typeof TABS)[number]["id"]) : "mina";
 
-  const mine = all.filter((s) => s.my_status === "tilldelad" && s.ends_at >= now);
+  // Mina pass: kommande och pågående, plus avslutade som saknar eller fått tillbaka tidrapport.
+  const needsReport = (s: PortalShift) => s.my_status === "tilldelad" && s.ends_at < now && !s.locked && (s.attest_status === "" || s.attest_status === "avvisad");
+  const mine = all.filter((s) => s.my_status === "tilldelad" && (s.ends_at >= now || needsReport(s)));
   const available = all.filter((s) => s.ends_at >= now && s.my_status !== "tilldelad" && (s.open || s.my_status === "ansokt"));
-  const past = all.filter((s) => s.my_status === "tilldelad" && s.ends_at < now).reverse();
+  const past = all.filter((s) => s.my_status === "tilldelad" && s.ends_at < now && !needsReport(s)).reverse();
+  const toReport = all.filter(needsReport).length;
   const list = tab === "mina" ? mine : tab === "lediga" ? available : past;
   const applied = available.filter((s) => s.my_status === "ansokt").length;
   const skills = ((me?.staff_skills ?? []) as unknown as { staff_functions: { name: string } | null }[]).map((x) => x.staff_functions?.name).filter(Boolean);
@@ -91,9 +109,12 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
             Ditt konto är inte kopplat till personalregistret. Kontakta den som planerar personal.
           </p>
         )}
+        {me && <PushToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""} save={savePush} remove={removePush} />}
         {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
         {sp.sokt && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Tack! Du har sökt passet. Du får besked när det är bemannat.</p>}
         {sp.aterkallad && <p className="rounded-lg bg-sunk px-4 py-3 text-sm">Din ansökan är tillbakadragen.</p>}
+        {sp.rapporterad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Tack! Tiden är rapporterad och väntar på attest.</p>}
+        {tab === "mina" && toReport > 0 && <p className="rounded-lg bg-st-preliminar-soft px-4 py-3 text-sm text-st-preliminar">Du har {toReport} pass att rapportera tid för.</p>}
         {tab === "lediga" && applied > 0 && <p className="text-sm text-muted">Du har sökt {applied} pass som väntar på besked.</p>}
 
         {list.length === 0 ? (
@@ -107,13 +128,14 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
               {shifts.map((s) => {
                 const full = s.filled >= s.needed;
                 return (
-                  <article key={s.id} className="card p-4 grid gap-2 border-l-4" style={{ borderLeftColor: s.color }}>
+                  <article key={s.id} id={`pass-${s.id}`} className="card p-4 grid gap-2 border-l-4 scroll-mt-4" style={{ borderLeftColor: s.color }}>
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <p className="font-semibold">{s.function}{s.title ? ` · ${s.title}` : ""}</p>
                       <p className="tabular-nums font-medium">{fmtTime(s.starts_at)}–{fmtTime(s.ends_at)} <span className="text-sm text-muted">({shiftHours(s).toLocaleString("sv-SE")} h)</span></p>
                     </div>
                     {(s.event || s.room) && <p className="text-sm text-muted">{[s.event, s.room].filter(Boolean).join(" · ")}</p>}
                     {s.note && <p className="text-sm">{s.note}</p>}
+                    {s.my_status === "tilldelad" && <TimeReport s={s} tab={tab} now={now} />}
                     {tab === "lediga" && (
                       <div className="flex flex-wrap items-center gap-3 pt-1">
                         {s.my_status === "ansokt" ? (
@@ -139,3 +161,44 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
     </div>
   );
 }
+
+/** Tidrapport på ett eget pass: formulär när passet har börjat, annars status. */
+function TimeReport({ s, tab, now }: { s: PortalShift; tab: string; now: string }) {
+  const started = new Date(s.starts_at).getTime() - 2 * 3_600_000 <= new Date(now).getTime();
+  if (!started) return null;
+  const status = (s.attest_status ?? "") as AttestStatus;
+  const hours = workedHours({ actual_start: s.actual_start, actual_end: s.actual_end, break_minutes: s.break_minutes });
+  const editable = !s.locked && status !== "attesterad";
+  const chip =
+    status === "attesterad" ? "bg-st-genomford-soft text-ok" : status === "rapporterad" ? "bg-st-preliminar-soft text-st-preliminar" : status === "avvisad" ? "bg-warn-soft text-warn" : "bg-sunk text-muted";
+  return (
+    <div className="grid gap-2 border-t border-line pt-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${chip}`}>{status === "rapporterad" ? "Väntar på attest" : ATTEST_LABEL[status]}</span>
+        {s.actual_start && s.actual_end && (
+          <span className="tabular-nums">
+            {fmtTime(s.actual_start)}–{fmtTime(s.actual_end)}
+            {s.break_minutes ? `, rast ${s.break_minutes} min` : ""} · {hours?.toLocaleString("sv-SE")} h
+          </span>
+        )}
+      </div>
+      {status === "avvisad" && s.attest_comment && <p className="text-sm text-warn">{s.attest_comment}</p>}
+      {editable && (
+        <details open={status === "" || status === "avvisad"}>
+          <summary className="cursor-pointer text-sm font-medium text-brand">{s.actual_start ? "Ändra tid" : "Rapportera tid"}</summary>
+          <form action={reportTime.bind(null, s.id, tab)} className="mt-2 grid gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <label className="field"><span className="label">Datum</span><input className="input" type="date" name="date" required defaultValue={isoToDate(s.actual_start ?? s.starts_at)} /></label>
+              <label className="field"><span className="label">Start</span><input className="input" type="time" name="from" step={300} required defaultValue={isoToLocal(s.actual_start ?? s.starts_at).slice(11)} /></label>
+              <label className="field"><span className="label">Slut</span><input className="input" type="time" name="to" step={300} required defaultValue={isoToLocal(s.actual_end ?? s.ends_at).slice(11)} /></label>
+              <label className="field"><span className="label">Rast (min)</span><input className="input" type="number" name="break" min={0} max={600} defaultValue={s.break_minutes ?? 0} /></label>
+            </div>
+            <input className="input" name="comment" defaultValue={s.report_comment ?? ""} placeholder="Kommentar (valfritt), t.ex. varför tiden avviker" aria-label="Kommentar" />
+            <div><button className="btn btn-primary" type="submit">{s.actual_start ? "Spara tiden" : "Rapportera"}</button></div>
+          </form>
+        </details>
+      )}
+    </div>
+  );
+}
+

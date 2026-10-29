@@ -35,6 +35,7 @@ const SECTIONS: Section[] = [
     href: "/personal",
     items: [
       { href: "/personal", label: "Pass" },
+      { href: "/personal/tid", label: "Tid och attest" },
       { href: "/personal/personer", label: "Personer" },
       { href: "/personal/funktioner", label: "Funktioner" },
     ],
