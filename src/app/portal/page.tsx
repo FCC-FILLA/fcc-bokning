@@ -1,3 +1,4 @@
+import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
 import { EventInfo, type StaffEventInfo } from "@/components/event-info";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
@@ -6,7 +7,7 @@ import { fmtDate, fmtTime, isoToDate, isoToLocal, weekday } from "@/lib/datum";
 import { ASSIGNMENT_LABEL, ATTEST_LABEL, shiftHours, workedHours, type AssignmentStatus, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
 import { PushToggle } from "@/components/push-toggle";
-import { apply, removePush, reportTime, savePush, signOut, withdraw } from "./actions";
+import { apply, removePush, reportTime, saveMyDetails, savePush, signOut, withdraw } from "./actions";
 
 export const metadata: Metadata = {
   title: "Mina pass",
@@ -44,14 +45,16 @@ const TABS = [
   { id: "mina", label: "Mina pass" },
   { id: "lediga", label: "Lediga pass" },
   { id: "tidigare", label: "Tidigare" },
+  { id: "uppgifter", label: "Mina uppgifter" },
 ] as const;
 
-export default async function PortalPage({ searchParams }: { searchParams: Promise<{ flik?: string; fel?: string; sokt?: string; aterkallad?: string; rapporterad?: string }> }) {
+export default async function PortalPage({ searchParams }: { searchParams: Promise<{ flik?: string; fel?: string; sokt?: string; aterkallad?: string; rapporterad?: string; sparad?: string }> }) {
   const sp = await searchParams;
   const profile = await requireProfile();
   const supabase = await createClient();
-  const [{ data }, { data: me }] = await Promise.all([
+  const [{ data }, { data: me }, { data: details }] = await Promise.all([
     supabase.rpc("portal_shifts"),
+    supabase.rpc("my_details"),
     supabase.from("staff").select("name, staff_skills(staff_functions(name))").eq("profile_id", profile.id).maybeSingle(),
   ]);
   const all = (data ?? []) as PortalShift[];
@@ -64,7 +67,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const available = all.filter((s) => s.ends_at >= now && s.my_status !== "tilldelad" && (s.open || s.my_status === "ansokt"));
   const past = all.filter((s) => s.my_status === "tilldelad" && s.ends_at < now && !needsReport(s)).reverse();
   const toReport = all.filter(needsReport).length;
-  const list = tab === "mina" ? mine : tab === "lediga" ? available : past;
+  const list = tab === "mina" ? mine : tab === "lediga" ? available : tab === "tidigare" ? past : [];
   const applied = available.filter((s) => s.my_status === "ansokt").length;
   const skills = ((me?.staff_skills ?? []) as unknown as { staff_functions: { name: string } | null }[]).map((x) => x.staff_functions?.name).filter(Boolean);
 
@@ -119,7 +122,17 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         {tab === "mina" && toReport > 0 && <p className="rounded-lg bg-st-preliminar-soft px-4 py-3 text-sm text-st-preliminar">Du har {toReport} pass att rapportera tid för.</p>}
         {tab === "lediga" && applied > 0 && <p className="text-sm text-muted">Du har sökt {applied} pass som väntar på besked.</p>}
 
-        {list.length === 0 ? (
+        {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Tack! Dina uppgifter är sparade.</p>}
+        {tab === "uppgifter" ? (
+          details ? (
+            <section className="card p-5 grid gap-3">
+              <p className="text-sm text-muted">Uppgifterna används för lön, kontakt och om något händer under ett pass.</p>
+              <StaffDetailsForm d={details as StaffDetails} action={saveMyDetails} />
+            </section>
+          ) : (
+            <div className="card p-8 text-center text-muted">Ditt konto är inte kopplat till personalregistret ännu.</div>
+          )
+        ) : list.length === 0 ? (
           <div className="card p-8 text-center text-muted">
             {tab === "mina" ? "Inga kommande pass. Titta under Lediga pass." : tab === "lediga" ? "Inga lediga pass just nu i dina funktioner." : "Inga tidigare pass."}
           </div>

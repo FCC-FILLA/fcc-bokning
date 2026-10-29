@@ -5,7 +5,8 @@ import { fmtDate, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
 import { loadCompany } from "@/lib/foretag";
 import { ATTEST_LABEL, shiftHours, workedHours, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
-import { reportTime, respond } from "./actions";
+import { reportTime, respond, saveLinkDetails } from "./actions";
+import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
 
 export const metadata: Metadata = { title: "Mina pass", robots: { index: false, follow: false } };
 
@@ -38,13 +39,17 @@ export default async function LinkPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string }>;
+  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string; uppgifter?: string }>;
 }) {
   const { token } = await params;
   const sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(token)) notFound();
   const supabase = await createClient();
-  const [{ data }, company] = await Promise.all([supabase.rpc("link_shifts", { p_token: token }), loadCompany(supabase)]);
+  const [{ data }, company, { data: details }] = await Promise.all([
+    supabase.rpc("link_shifts", { p_token: token }),
+    loadCompany(supabase),
+    supabase.rpc("link_details", { p_token: token }),
+  ]);
   if (!data) notFound();
   const doc = data as { name: string; company: string | null; kind: "frilans" | "leverantor"; shifts: LinkShift[] };
   const now = new Date().toISOString();
@@ -130,6 +135,15 @@ export default async function LinkPage({
                 </li>
               ))}
             </ul>
+          </details>
+        )}
+        {details && (
+          <details id="uppgifter" className="card p-4 scroll-mt-4" open={!!sp.uppgifter}>
+            <summary className="cursor-pointer font-medium">{supplier ? "Våra uppgifter" : "Mina uppgifter"}</summary>
+            {sp.uppgifter && <p className="mt-3 rounded-lg bg-st-genomford-soft px-4 py-2 text-sm text-ok">Tack! Uppgifterna är sparade.</p>}
+            <div className="mt-4">
+              <StaffDetailsForm d={details as StaffDetails} action={saveLinkDetails.bind(null, token)} />
+            </div>
           </details>
         )}
         <p className="text-xs text-muted">Den här sidan är personlig. Dela inte länken.</p>

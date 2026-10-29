@@ -773,3 +773,31 @@ describe("notiser", () => {
     expect((await db.query<{ n: number }>("select count(*)::int n from notifications where pushed_at is null")).rows[0].n).toBe(0);
   });
 });
+
+describe("personalens uppgifter", () => {
+  it("frilans fyller i via länken, ser bara maskat personnummer, och planerare ser inte bankkonto", async () => {
+    const st = await db.query<{ id: string; link_token: string }>("insert into staff (kind, name) values ('frilans', 'Uppgift Testsson') returning id, link_token");
+    const tok = st.rows[0].link_token;
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ r: string }>(
+        "select link_details_save($1, $2::jsonb) as r",
+        [tok, JSON.stringify({ address: "Gatan 1", ice_name: "Mamma", ice_phone: "070", personal_number: "199001011234", account_number: "1234567890", clearing_number: "8327", f_tax: "on" })],
+      );
+      expect(r.rows[0].r).toBe("ok");
+      const d = await db.query<{ d: Record<string, unknown> }>("select link_details($1) as d", [tok]);
+      expect(d.rows[0].d.address).toBe("Gatan 1");
+      expect(d.rows[0].d.personal_number_masked).toBe("199001-••••");
+      expect(JSON.stringify(d.rows[0].d)).not.toContain("1234567890");
+      // Tomt fält skriver inte över det sparade.
+      await db.query("select link_details_save($1, $2::jsonb)", [tok, JSON.stringify({ address: "Gatan 2" })]);
+    } finally {
+      await db.exec("reset role");
+    }
+    const saved = await db.query<{ personal_number: string; address: string }>("select personal_number, address from staff_details where staff_id = $1", [st.rows[0].id]);
+    expect(saved.rows[0]).toEqual({ personal_number: "199001011234", address: "Gatan 2" });
+    const basic = await asUser(ADMIN, () => db.query<{ b: Record<string, unknown> }>("select staff_details_basic($1) as b", [st.rows[0].id]));
+    expect(basic.rows[0].b.has_bank).toBe(true);
+    expect(JSON.stringify(basic.rows[0].b)).not.toContain("1234567890");
+  });
+});

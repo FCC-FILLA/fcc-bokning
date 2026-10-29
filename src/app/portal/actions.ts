@@ -1,6 +1,7 @@
 "use server";
 
 import { deliverNotifications } from "@/lib/notiser";
+import { detailsFromForm } from "@/components/staff-details-form";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { localToIso } from "@/lib/datum";
@@ -83,4 +84,11 @@ export async function savePush(json: string) {
 export async function removePush(endpoint: string) {
   const supabase = await createClient();
   await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+}
+
+export async function saveMyDetails(fd: FormData) {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("my_details_save", { p: detailsFromForm(fd) });
+  revalidatePath("/portal");
+  redirect(`/portal?flik=uppgifter&${data === "ok" ? "sparad=1" : "fel=" + encodeURIComponent("Det gick inte att spara.")}`);
 }

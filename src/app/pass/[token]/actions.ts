@@ -1,6 +1,7 @@
 "use server";
 
 import { deliverNotifications } from "@/lib/notiser";
+import { detailsFromForm } from "@/components/staff-details-form";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { localToIso } from "@/lib/datum";
@@ -55,4 +56,12 @@ export async function reportTime(token: string, shiftId: string, fd: FormData) {
   deliverNotifications();
   revalidatePath(`/pass/${token}`);
   redirect(`/pass/${token}?${data === "ok" ? "tid=1" : `fel=${encodeURIComponent(MSG[String(data)] ?? "Något gick fel.")}`}#pass-${shiftId}`);
+}
+
+export async function saveLinkDetails(token: string, fd: FormData) {
+  if (!/^[0-9a-f-]{36}$/i.test(token)) redirect("/");
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("link_details_save", { p_token: token, p: detailsFromForm(fd) });
+  revalidatePath(`/pass/${token}`);
+  redirect(`/pass/${token}?${data === "ok" ? "uppgifter=1" : "fel=" + encodeURIComponent("Det gick inte att spara.")}#uppgifter`);
 }

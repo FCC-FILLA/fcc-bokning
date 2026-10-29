@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { canManageStaff, requireProfile } from "@/lib/auth";
+import { canManageStaff, isAdmin, requireProfile } from "@/lib/auth";
 import { fmtDate, fmtTime } from "@/lib/datum";
 import { ASSIGNMENT_LABEL, KIND_LABEL, type AssignmentStatus, type Staff } from "@/lib/personal";
 import { getStaffLookups } from "@/lib/personal-data";
@@ -22,7 +22,9 @@ export default async function PersonPage({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  const manager = canManageStaff(await requireProfile());
+  const profile = await requireProfile();
+  const manager = canManageStaff(profile);
+  const admin = isAdmin(profile);
   const supabase = await createClient();
   const [{ data: p }, { data: skills }, { data: shifts }, { functions }] = await Promise.all([
     supabase.from("staff").select("*").eq("id", id).maybeSingle(),
@@ -37,6 +39,10 @@ export default async function PersonPage({
       .limit(50),
     getStaffLookups(),
   ]);
+  const { data: detailRow } = admin
+    ? await supabase.from("staff_details").select("*").eq("staff_id", id).maybeSingle()
+    : await supabase.rpc("staff_details_basic", { p_staff: id });
+  const d = (detailRow ?? null) as Record<string, string | boolean | null> | null;
   if (!p) notFound();
   const person = p as Staff;
   const mine = new Set(((skills ?? []) as { function_id: string }[]).map((s) => s.function_id));
@@ -133,6 +139,39 @@ export default async function PersonPage({
         </fieldset>
         {manager && <div><button className="btn btn-primary" type="submit">Spara</button></div>}
       </form>
+
+      <section id="uppgifter" className="card p-5 grid gap-3 scroll-mt-28">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-lg font-semibold">Personens egna uppgifter</h2>
+          <span className="text-xs text-muted">Fylls i av personen själv {person.kind === "intern" ? "i portalen under Mina uppgifter" : "via den personliga länken"}.</span>
+        </div>
+        {!d ? (
+          <p className="text-sm text-muted">Inget ifyllt ännu.</p>
+        ) : (
+          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+            {[
+              ["Adress", [d.address, [d.postal_code, d.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")],
+              ["Närmast anhörig", [d.ice_name, d.ice_relation && `(${d.ice_relation})`, d.ice_phone].filter(Boolean).join(" ")],
+              ["Personnummer", admin ? d.personal_number : d.has_personal_number ? "Ifyllt (syns för administratörer)" : ""],
+              ["Bank", admin ? [d.bank_name, d.clearing_number, d.account_number].filter(Boolean).join(" ") : d.has_bank ? `${d.bank_name ?? "Ifyllt"} (konto syns för administratörer)` : d.bank_name],
+              ["Skatt", d.tax_note],
+              ["Eget företag", [d.company_name, d.org_number, d.f_tax ? "F-skatt" : ""].filter(Boolean).join(", ")],
+              ["Specialkost", d.food_preferences],
+              ["Klädstorlek", d.clothing_size],
+              ["Körkort", d.drivers_license ? "Ja" : ""],
+              ["Språk", d.languages],
+              ["Övrigt", d.other],
+            ]
+              .filter(([, v]) => v)
+              .map(([k, v]) => (
+                <div key={String(k)} className="grid">
+                  <dt className="label">{k}</dt>
+                  <dd className="whitespace-pre-line">{String(v)}</dd>
+                </div>
+              ))}
+          </dl>
+        )}
+      </section>
 
       <section className="card p-5 grid gap-3">
         <h2 className="text-lg font-semibold">Kommande pass</h2>
