@@ -41,9 +41,9 @@ export default async function SettingsPage() {
       facts: [`${articles} artiklar`, noPrice ? `${noPrice} saknar pris` : "alla har pris", `${withText} har kundtext`],
     },
     {
-      href: "/installningar/offerttexter",
-      title: "Offerttexter",
-      text: "Inledning, villkor och giltighetstid som följer med varje ny offert.",
+      href: "/installningar/offert",
+      title: "Offert",
+      text: "Inledning, avslutning och avtalsvillkor på svenska och engelska, omslagsbild och vilka delar kunden ser.",
       icon: "host",
       facts: [],
     },

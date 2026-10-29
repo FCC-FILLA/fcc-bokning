@@ -2,8 +2,8 @@
 import { Document, Image, Page, Path, StyleSheet, Svg, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { addressLine, footerParts } from "@/lib/foretag";
 import { iconPaths } from "@/lib/ikoner";
-import { fmtDate, fmtRange } from "@/lib/datum";
-import { fmtKr, lineTotal, quoteTotals } from "@/lib/offert";
+import { lineTotal, quoteTotals } from "@/lib/offert";
+import { longDate, money, num, strings, timeSpan, unitLabel } from "@/lib/sprak";
 import { groupLines, type QuoteDoc } from "@/lib/offert-doc";
 
 // PDF för en offert. Inbyggt typsnitt (Helvetica) som klarar å, ä och ö.
@@ -34,7 +34,7 @@ const s = StyleSheet.create({
   cDate: { width: 62 },
   cQty: { width: 50, textAlign: "right" },
   cPrice: { width: 66, textAlign: "right" },
-  cDisc: { width: 40, textAlign: "right" },
+  cDisc: { width: 52, textAlign: "right" },
   cSum: { width: 72, textAlign: "right" },
   sumRow: { flexDirection: "row", justifyContent: "flex-end", paddingVertical: 2 },
   sumLabel: { width: 160, textAlign: "right", paddingRight: 10, color: MUTED },
@@ -55,26 +55,30 @@ const shortDate = (d: string | null) => (d ? `${Number(d.slice(8, 10))}/${Number
 export type PdfImages = Map<string, Buffer>;
 
 function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
-  const cover = doc.rooms.map((r) => r.image).find((i): i is string => !!i && images.has(i));
+  const lang = doc.language;
+  const L = strings(lang);
+  const look = doc.look;
+  const cover = [look.cover, ...doc.rooms.map((r) => r.image)].find((i): i is string => !!i && images.has(i));
+  const img = (p: string | null) => look.showImages && !!p && images.has(p);
   const t = quoteTotals(doc.lines);
   const included = groupLines(doc.lines.filter((l) => l.kind === "ingar"));
   const addons = doc.lines.filter((l) => l.kind === "tillval");
   const header = (
     <View style={s.th} fixed>
       <Text style={s.cThumb} />
-      <Text style={s.cDesc}>Beskrivning</Text>
-      <Text style={s.cDate}>Datum</Text>
-      <Text style={s.cQty}>Antal</Text>
-      <Text style={s.cPrice}>À-pris</Text>
-      <Text style={s.cDisc}>Rabatt</Text>
-      <Text style={s.cSum}>Belopp</Text>
+      <Text style={s.cDesc}>{L.desc}</Text>
+      <Text style={s.cDate}>{L.date}</Text>
+      <Text style={s.cQty}>{L.qty}</Text>
+      <Text style={s.cPrice}>{L.unitPrice}</Text>
+      <Text style={s.cDisc}>{L.discount}</Text>
+      <Text style={s.cSum}>{L.amount}</Text>
     </View>
   );
   const row = (l: QuoteDoc["lines"][number], i: number) => (
     <View style={[s.tr, { alignItems: "center" }]} key={i} wrap={false}>
       <View style={s.cThumb}>
-        {l.image && images.has(l.image) ? (
-          <Image style={s.thumb} src={images.get(l.image)!} />
+        {img(l.image) ? (
+          <Image style={s.thumb} src={images.get(l.image!)!} />
         ) : (
           <Svg viewBox="0 0 48 48" width={22} height={22}>
             {iconPaths(l.icon).map((d, k) => (
@@ -88,15 +92,15 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
         {l.text && <Text style={s.lineText}>{l.text}</Text>}
       </View>
       <Text style={s.cDate}>{shortDate(l.line_date)}</Text>
-      <Text style={s.cQty}>{`${l.quantity.toLocaleString("sv-SE")} ${l.unit}`}</Text>
-      <Text style={s.cPrice}>{fmtKr(l.unit_price)}</Text>
+      <Text style={s.cQty}>{`${num(l.quantity, lang)} ${unitLabel(l.unit, l.quantity, lang)}`}</Text>
+      <Text style={s.cPrice}>{money(l.unit_price, lang)}</Text>
       <Text style={s.cDisc}>{l.discount_pct ? `${l.discount_pct} %` : ""}</Text>
-      <Text style={s.cSum}>{fmtKr(lineTotal(l))}</Text>
+      <Text style={s.cSum}>{money(lineTotal(l), lang)}</Text>
     </View>
   );
 
   return (
-    <Document title={`Offert ${doc.number} – ${doc.title}`} author={doc.company.name} language="sv">
+    <Document title={`${L.quote} ${doc.number} – ${doc.title}`} author={doc.company.name} language={lang}>
       <Page size="A4" style={s.page}>
         <View style={s.band} fixed />
         <View style={s.head}>
@@ -105,24 +109,24 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
             <Text style={s.brandSub}>{addressLine(doc.company)}</Text>
           </View>
           <View>
-            <Text style={s.docType}>Offert</Text>
-            <Text style={s.meta}>Nr {doc.number}</Text>
-            {doc.sent_at && <Text style={s.meta}>Datum {fmtDate(doc.sent_at)}</Text>}
-            {doc.valid_until && <Text style={s.meta}>Giltig till {fmtDate(doc.valid_until)}</Text>}
+            <Text style={s.docType}>{L.quote}</Text>
+            <Text style={s.meta}>{L.no} {doc.number}</Text>
+            {doc.sent_at && <Text style={s.meta}>{L.date} {longDate(doc.sent_at, lang)}</Text>}
+            {doc.valid_until && <Text style={s.meta}>{L.validUntil} {longDate(doc.valid_until, lang)}</Text>}
           </View>
         </View>
 
-        {cover && <Image style={s.hero} src={images.get(cover)!} />}
+        {cover && look.showImages && <Image style={s.hero} src={images.get(cover)!} />}
 
         <Text style={s.title}>{doc.title}</Text>
         <View style={s.infoRow}>
           <View style={s.infoCol}>
-            <Text style={s.label}>Kund</Text>
+            <Text style={s.label}>{L.customer}</Text>
             <Text>{doc.company_name ?? "–"}</Text>
             {doc.contact_name && <Text>{doc.contact_name}</Text>}
           </View>
           <View style={s.infoCol}>
-            <Text style={s.label}>Er kontakt hos oss</Text>
+            <Text style={s.label}>{L.yourContact}</Text>
             <Text>{doc.salesperson_name || "–"}</Text>
             {doc.salesperson_email && <Text>{doc.salesperson_email}</Text>}
           </View>
@@ -130,15 +134,15 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
 
         {doc.intro && <Text style={s.para}>{doc.intro}</Text>}
 
-        {doc.rooms.length > 0 && (
+        {look.showRooms && doc.rooms.length > 0 && (
           <View style={{ marginBottom: 8 }}>
-            <Text style={s.h2}>Era lokaler</Text>
+            <Text style={s.h2}>{L.yourRooms}</Text>
             {doc.rooms.map((r, i) => (
               <View style={s.roomCard} key={i} wrap={false}>
-                {r.image && images.has(r.image) && <Image style={s.roomImg} src={images.get(r.image)!} />}
+                {img(r.image) && <Image style={s.roomImg} src={images.get(r.image!)!} />}
                 <View style={{ flexGrow: 1, flexBasis: 0 }}>
                   <Text style={s.roomName}>{r.name}</Text>
-                  <Text style={s.roomFacts}>{[r.kvm ? `${r.kvm} kvm` : null, r.max ? `upp till ${r.max} personer` : null].filter(Boolean).join(" · ")}</Text>
+                  <Text style={s.roomFacts}>{[r.kvm ? `${num(r.kvm, lang)} ${L.sqm}` : null, r.max ? L.upTo(num(r.max, lang)) : null].filter(Boolean).join(" · ")}</Text>
                   {r.text && <Text style={{ fontSize: 8.5 }}>{r.text}</Text>}
                 </View>
               </View>
@@ -146,16 +150,16 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
           </View>
         )}
 
-        {doc.bookings.length > 0 && (
+        {look.showProgram && doc.bookings.length > 0 && (
           <View style={{ marginBottom: 8 }}>
-            <Text style={s.h2}>Lokaler och tider</Text>
+            <Text style={s.h2}>{L.roomsAndTimes}</Text>
             {doc.bookings.slice(0, 40).map((b, i) => (
               <View style={s.tr} key={i} wrap={false}>
                 <Text style={{ width: 170 }}>{b.room}</Text>
-                <Text>{fmtRange(b.starts_at, b.ends_at)}</Text>
+                <Text>{`${longDate(b.starts_at, lang)}, ${timeSpan(b.starts_at, b.ends_at, lang)}`}</Text>
               </View>
             ))}
-            {doc.bookings.length > 40 && <Text style={{ color: MUTED, marginTop: 3 }}>{`… och ${doc.bookings.length - 40} tillfällen till.`}</Text>}
+            {doc.bookings.length > 40 && <Text style={{ color: MUTED, marginTop: 3 }}>{L.moreOccasions(doc.bookings.length - 40)}</Text>}
           </View>
         )}
 
@@ -170,43 +174,45 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
         <View style={{ marginTop: 10 }} wrap={false}>
           {t.discount > 0 && (
             <>
-              <View style={s.sumRow}><Text style={s.sumLabel}>Summa före rabatt</Text><Text style={s.sumVal}>{fmtKr(t.beforeDiscount)}</Text></View>
-              <View style={s.sumRow}><Text style={s.sumLabel}>Rabatt</Text><Text style={s.sumVal}>{`−${fmtKr(t.discount)}`}</Text></View>
+              <View style={s.sumRow}><Text style={s.sumLabel}>{L.sumBeforeDiscount}</Text><Text style={s.sumVal}>{money(t.beforeDiscount, lang)}</Text></View>
+              <View style={s.sumRow}><Text style={s.sumLabel}>{L.discount}</Text><Text style={s.sumVal}>{`−${money(t.discount, lang)}`}</Text></View>
             </>
           )}
-          <View style={s.sumRow}><Text style={s.sumLabel}>Summa exkl. moms</Text><Text style={s.sumVal}>{fmtKr(t.exVat)}</Text></View>
-          <View style={s.sumRow}><Text style={s.sumLabel}>Moms</Text><Text style={s.sumVal}>{fmtKr(t.vat)}</Text></View>
+          <View style={s.sumRow}><Text style={s.sumLabel}>{L.sumExVat}</Text><Text style={s.sumVal}>{money(t.exVat, lang)}</Text></View>
+          <View style={s.sumRow}><Text style={s.sumLabel}>{L.vat}</Text><Text style={s.sumVal}>{money(t.vat, lang)}</Text></View>
           <View style={[s.sumRow, { borderTopWidth: 1, borderTopColor: BRAND, marginTop: 2, paddingTop: 4 }]}>
-            <Text style={[s.sumLabel, s.total, { color: "#2a1c1d" }]}>Att betala inkl. moms</Text>
-            <Text style={[s.sumVal, s.total]}>{fmtKr(t.inclVat)}</Text>
+            <Text style={[s.sumLabel, s.total, { color: "#2a1c1d" }]}>{L.toPay}</Text>
+            <Text style={[s.sumVal, s.total]}>{money(t.inclVat, lang)}</Text>
           </View>
         </View>
 
-        {addons.length > 0 && (
+        {look.showAddons && addons.length > 0 && (
           <View wrap>
-            <Text style={s.h2} minPresenceAhead={60}>Möjliga tillval (ingår inte ovan)</Text>
+            <Text style={s.h2} minPresenceAhead={60}>{L.addonsPdf}</Text>
             {header}
             {addons.map(row)}
-            <View style={s.sumRow}><Text style={s.sumLabel}>Tillval exkl. moms</Text><Text style={s.sumVal}>{fmtKr(t.addonsExVat)}</Text></View>
+            <View style={s.sumRow}><Text style={s.sumLabel}>{L.addonsExVat}</Text><Text style={s.sumVal}>{money(t.addonsExVat, lang)}</Text></View>
           </View>
         )}
 
+        {look.closing && <Text style={[s.para, { marginTop: 14, color: BRAND, fontSize: 10.5 }]}>{look.closing}</Text>}
+
         {doc.terms && (
           <View wrap>
-            <Text style={s.h2}>Villkor</Text>
+            <Text style={s.h2}>{L.terms}</Text>
             <Text style={s.terms}>{doc.terms}</Text>
           </View>
         )}
 
         {doc.status === "accepterad" && doc.accepted_at && (
           <Text style={[s.para, { marginTop: 12, color: "#2f6b45" }]}>
-            {`Godkänd ${fmtDate(doc.accepted_at)}${doc.accepted_name ? ` av ${doc.accepted_name}` : ""}.`}
+            {L.acceptedShort(longDate(doc.accepted_at, lang), doc.accepted_name ?? "")}
           </Text>
         )}
 
         <View style={s.footerLeft} fixed>
-          {footerParts(doc.company).map((row, i) => (
-            <Text key={i}>{(i === 0 ? [`Offert ${doc.number}`, ...row] : row).join(" · ")}</Text>
+          {footerParts(doc.company, lang).map((row, i) => (
+            <Text key={i}>{(i === 0 ? [`${L.quote} ${doc.number}`, ...row] : row).join(" · ")}</Text>
           ))}
         </View>
       </Page>
@@ -223,7 +229,7 @@ const okImage = (p: string | null): p is string =>
 
 /** Hämtar lokal- och artikelbilder. Lokala sökvägar via sajtens egen adress. Misslyckas en bild hoppar vi bara över den. */
 export async function fetchPdfImages(doc: QuoteDoc, origin: string): Promise<PdfImages> {
-  const paths = [...new Set([...doc.rooms.map((r) => r.image), ...doc.lines.map((l) => l.image)].filter(okImage))].slice(0, 24);
+  const paths = [...new Set([doc.look.cover, ...doc.rooms.map((r) => r.image), ...doc.lines.map((l) => l.image)].filter(okImage))].slice(0, 24);
   const out: PdfImages = new Map();
   await Promise.all(
     paths.map(async (p) => {

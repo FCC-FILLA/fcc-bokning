@@ -65,17 +65,20 @@ export async function createQuote(fd: FormData) {
     contact_id = ev?.contact_id ?? null;
   }
   const days = Number(s.get("quote_valid_days") ?? 30) || 30;
+  const language = fd.get("language") === "en" ? "en" : "sv";
+  const sfx = language === "en" ? "_en" : "";
   const { data: q, error } = await supabase
     .from("quotes")
     .insert({
       title,
+      language,
       event_id: eventId,
       company_id,
       contact_id,
       salesperson_id: profile.id,
       valid_until: addDays(todayDate(), days),
-      intro: s.get("quote_intro") ?? null,
-      terms: s.get("quote_terms") ?? null,
+      intro: s.get(`quote_intro${sfx}`) ?? null,
+      terms: s.get(`quote_terms${sfx}`) ?? null,
     })
     .select("id")
     .single();
@@ -94,21 +97,34 @@ export async function updateQuote(id: string, fd: FormData) {
   const title = opt(fd.get("title"));
   if (!title) fail(`/offerter/${id}`, "Ge offerten en rubrik.");
   const supabase = await createClient();
+  // Byts språket och texterna är standardtexterna, byts de mot standardtexterna på det nya språket.
+  const language = fd.get("language") === "en" ? "en" : "sv";
+  const { data: cur } = await supabase.from("quotes").select("language").eq("id", id).single();
+  let intro = opt(fd.get("intro"));
+  let terms = opt(fd.get("terms"));
+  let swapped = false;
+  if (cur && cur.language !== language) {
+    const s = await settings();
+    const def = (k: string, l: string) => (s.get(`${k}${l === "en" ? "_en" : ""}`) ?? "").trim();
+    if (!intro || intro === def("quote_intro", cur.language)) { intro = def("quote_intro", language) || null; swapped = true; }
+    if (!terms || terms === def("quote_terms", cur.language)) { terms = def("quote_terms", language) || null; swapped = true; }
+  }
   const { error } = await supabase
     .from("quotes")
     .update({
       title,
+      language,
       company_id: opt(fd.get("company_id")),
       contact_id: opt(fd.get("contact_id")),
       salesperson_id: opt(fd.get("salesperson_id")),
       event_id: opt(fd.get("event_id")),
       valid_until: opt(fd.get("valid_until")),
-      intro: opt(fd.get("intro")),
-      terms: opt(fd.get("terms")),
+      intro,
+      terms,
     })
     .eq("id", id);
   revalidatePath(`/offerter/${id}`);
-  redirect(`/offerter/${id}?${error ? `fel=${encodeURIComponent("Det gick inte att spara.")}` : "sparat=1"}`);
+  redirect(`/offerter/${id}?${error ? `fel=${encodeURIComponent("Det gick inte att spara.")}` : swapped ? "sprak=1" : "sparat=1"}`);
 }
 
 type LineInput = {
@@ -245,6 +261,7 @@ export async function duplicateQuote(id: string) {
       valid_until: addDays(todayDate(), Number(s.get("quote_valid_days") ?? 30) || 30),
       intro: q.intro,
       terms: q.terms,
+      language: q.language,
     })
     .select("id")
     .single();

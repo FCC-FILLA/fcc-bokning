@@ -61,10 +61,11 @@ export async function loadCompany(supabase: SupabaseClient): Promise<Company> {
 export const addressLine = (c: Company) => [c.address, c.postal].filter(Boolean).join(", ");
 
 /** Sidfotens rader: juridiskt namn och adress, sedan kontakt, sedan org.nr, moms och bankgiro. */
-export function footerParts(c: Company) {
+export function footerParts(c: Company, lang: "sv" | "en" = "sv") {
+  const L = lang === "en" ? { org: "Reg. no.", vat: "VAT no." } : { org: "Org.nr", vat: "Momsreg.nr" };
   return [
     [c.legal_name, addressLine(c)],
     [c.phone, c.email, c.web],
-    [c.orgnr && `Org.nr ${c.orgnr}`, c.vat_no && `Momsreg.nr ${c.vat_no}`, c.bankgiro && `Bankgiro ${c.bankgiro}`],
+    [c.orgnr && `${L.org} ${c.orgnr}`, c.vat_no && `${L.vat} ${c.vat_no}`, c.bankgiro && `Bankgiro ${c.bankgiro}`],
   ].map((row) => row.filter(Boolean) as string[]).filter((row) => row.length > 0);
 }

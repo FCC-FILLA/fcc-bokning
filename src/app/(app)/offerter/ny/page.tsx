@@ -56,6 +56,14 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           <input className="input" id="title" name="title" required defaultValue={selected?.title ?? ""} placeholder="T.ex. Årskonferens 2027" />
         </div>
         <div className="field">
+          <label className="label" htmlFor="language">Språk</label>
+          <select className="input w-48" id="language" name="language" defaultValue="sv">
+            <option value="sv">Svenska</option>
+            <option value="en">Engelska</option>
+          </select>
+          <span className="text-xs text-muted">Styr kundens offertsida, PDF:en, artikelnamn och standardtexter.</span>
+        </div>
+        <div className="field">
           <label className="label" htmlFor="company_id">Kund (om inget evenemang är valt)</label>
           <select className="input" id="company_id" name="company_id" defaultValue="">
             <option value="">Välj kund</option>

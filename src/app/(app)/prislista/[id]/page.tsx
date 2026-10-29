@@ -2,18 +2,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
+import { FCC_PHOTOS } from "@/lib/bilder";
 import { ICONS, ICON_KEYS } from "@/lib/ikoner";
+import { roomImages } from "@/lib/lokaler";
 import { createClient } from "@/lib/supabase/server";
 import type { Article } from "@/lib/types";
 import { ArticleIcon } from "@/components/icon";
 import { ImageInput } from "@/components/image-input";
 import { LineCard } from "@/components/line-card";
 import { saveArticleMedia } from "../actions";
-
-const PHOTOS = [
-  "stora-salen", "rorstrandssalarna", "rorstrand-1", "rorstrand-2", "rorstrand-3", "rorstrand-4", "rorstrand-5",
-  "rorstrand-6", "rorstrand-7", "lounge-1", "lounge-2", "birka", "karlbergssalen",
-].map((n) => `/lokaler/${n}.jpg`);
 
 type Room = { id: string; name: string; parent_id: string | null; image_path: string | null; sales_text: string | null };
 
@@ -30,13 +27,13 @@ export default async function ArticleMediaPage({
   const supabase = await createClient();
   const [{ data: a }, { data: groups }, { data: rooms }] = await Promise.all([
     supabase.from("articles").select("*").eq("id", id).maybeSingle(),
-    supabase.from("article_groups").select("id, name, icon"),
-    supabase.from("rooms").select("id, name, parent_id, image_path, sales_text"),
+    supabase.from("article_groups").select("id, name, name_en, icon"),
+    supabase.from("rooms").select("id, name, parent_id, image_path, gallery, active, sort_order, sales_text, sales_text_en"),
   ]);
   if (!a) notFound();
-  const art = a as Article & { icon: string | null; image_path: string | null };
-  const group = ((groups ?? []) as { id: string; name: string; icon: string }[]).find((g) => g.id === art.group_id);
-  const roomList = (rooms ?? []) as Room[];
+  const art = a as Article & { name_en: string | null; description_en: string | null };
+  const group = ((groups ?? []) as { id: string; name: string; name_en: string | null; icon: string }[]).find((g) => g.id === art.group_id);
+  const roomList = (rooms ?? []) as (Room & { gallery: string[]; sales_text_en: string | null })[];
   const room = roomList.find((r) => r.id === art.room_id);
   const parent = roomList.find((r) => r.id === room?.parent_id);
   const roomImage = room?.image_path ?? parent?.image_path ?? null;
@@ -55,9 +52,15 @@ export default async function ArticleMediaPage({
     vat_rate: Number(art.vat_rate),
     kind: "ingar" as const,
     image,
-    gallery: room ? roomList.filter((r) => r.image_path && (r.id === room.id || r.parent_id === room.id)).map((r) => r.image_path!) : [],
+    gallery: room ? roomImages(roomList, room.id) : [],
     icon: art.icon ?? group?.icon ?? "box",
     text: art.description ?? room?.sales_text ?? null,
+  };
+  const previewEn = {
+    ...preview,
+    group: group?.name_en ?? preview.group,
+    description: art.name_en ?? art.name,
+    text: art.description_en ?? room?.sales_text_en ?? null,
   };
 
   return (
@@ -72,16 +75,21 @@ export default async function ArticleMediaPage({
 
       <section className="grid gap-2">
         <h2 className="label">Så ser kunden den</h2>
-        <div className="max-w-md">
-          <LineCard line={preview} as="div" />
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-1"><span className="text-xs text-muted">Svenska</span><LineCard line={preview} as="div" /></div>
+          <div className="grid gap-1"><span className="text-xs text-muted">Engelska</span><LineCard line={previewEn} as="div" lang="en" /></div>
         </div>
       </section>
 
       <form action={saveArticleMedia.bind(null, id)} className="grid gap-5">
-        <fieldset disabled={!admin} className="card p-5 grid gap-3">
-          <legend className="sr-only">Text till kunden</legend>
+        <fieldset disabled={!admin} className="card p-5 grid gap-4 md:grid-cols-2">
+          <legend className="sr-only">Namn och text till kunden</legend>
+          <div className="field md:col-span-2 md:max-w-[calc(50%-0.5rem)] md:col-start-2">
+            <label className="label" htmlFor="name_en">Namn på engelska</label>
+            <input className="input" id="name_en" name="name_en" maxLength={200} defaultValue={art.name_en ?? ""} placeholder={art.name} />
+          </div>
           <div className="field">
-            <label className="label" htmlFor="description">Text till kunden</label>
+            <label className="label" htmlFor="description">Text till kunden, svenska</label>
             <textarea
               className="input min-h-24"
               id="description"
@@ -89,6 +97,18 @@ export default async function ArticleMediaPage({
               maxLength={400}
               defaultValue={art.description ?? ""}
               placeholder={room?.sales_text ? `Tomt = lokalens text: ${room.sales_text}` : "T.ex. vad som ingår, i en eller två meningar."}
+            />
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="description_en">Text till kunden, engelska</label>
+            <textarea
+              className="input min-h-24"
+              id="description_en"
+              name="description_en"
+              lang="en"
+              maxLength={400}
+              defaultValue={art.description_en ?? ""}
+              placeholder={room?.sales_text_en ? `Empty = room text: ${room.sales_text_en}` : "E.g. what is included, in a sentence or two."}
             />
           </div>
         </fieldset>
@@ -105,7 +125,7 @@ export default async function ArticleMediaPage({
               <select className="input" id="image_choice" name="image_choice" defaultValue="keep">
                 <option value="keep">Behåll {art.image_path ? (ownUpload ? "uppladdad bild" : art.image_path.replace("/lokaler/", "")) : roomImage ? "lokalens bild" : "ikonen"}</option>
                 <option value="">{roomImage ? "Lokalens bild" : "Ingen bild, visa ikonen"}</option>
-                {PHOTOS.map((p) => <option key={p} value={p}>{p.replace("/lokaler/", "")}</option>)}
+                {FCC_PHOTOS.map((p) => <option key={p} value={p}>{p.replace("/lokaler/", "")}</option>)}
               </select>
             </div>
             <ImageInput name="image" label="Eller ladda upp en egen bild" />

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
+import { isFccPhoto, removeUploaded, uploadImage } from "@/lib/bilder";
 import { createClient } from "@/lib/supabase/server";
 
 const opt = (v: FormDataEntryValue | null) => {
@@ -73,12 +74,11 @@ export async function saveSetting(key: string, fd: FormData) {
   await requireAdmin();
   const supabase = await createClient();
   await supabase.from("app_settings").upsert({ key, value: String(fd.get("value") ?? ""), updated_at: new Date().toISOString() });
-  revalidatePath("/installningar/offerttexter");
-  redirect("/installningar/offerttexter?sparad=1");
+  revalidatePath("/installningar/offert");
+  redirect("/installningar/offert?sparad=1");
 }
 
 const BUCKET = "artiklar";
-const storageName = (url: string | null) => url?.match(/\/storage\/v1\/object\/public\/artiklar\/(.+)$/)?.[1] ?? null;
 
 /** Ikon, bild och kundtext för en artikel. */
 export async function saveArticleMedia(id: string, fd: FormData) {
@@ -91,27 +91,25 @@ export async function saveArticleMedia(id: string, fd: FormData) {
   const file = fd.get("image");
   const choice = String(fd.get("image_choice") ?? "keep");
   if (file instanceof File && file.size > 0) {
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) {
-      back(`fel=${encodeURIComponent("Bilden måste vara JPG, PNG eller WebP och högst 5 MB.")}`);
-    }
-    const path = `${id}/${Date.now()}.${file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg"}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type, cacheControl: "31536000" });
-    if (error) back(`fel=${encodeURIComponent("Det gick inte att ladda upp bilden.")}`);
-    image_path = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+    const up = await uploadImage(supabase, BUCKET, id, file);
+    if (up.error) back(`fel=${encodeURIComponent(up.error)}`);
+    image_path = up.url!;
   } else if (choice !== "keep") {
-    image_path = choice === "" ? null : /^\/lokaler\/[\w-]+\.jpg$/.test(choice) ? choice : image_path;
+    image_path = choice === "" ? null : isFccPhoto(choice) ? choice : image_path;
   }
 
-  const icon = opt(fd.get("icon"));
   const { error } = await supabase
     .from("articles")
-    .update({ icon, description: opt(fd.get("description")), image_path })
+    .update({
+      icon: opt(fd.get("icon")),
+      description: opt(fd.get("description")),
+      name_en: opt(fd.get("name_en")),
+      description_en: opt(fd.get("description_en")),
+      image_path,
+    })
     .eq("id", id);
   if (error) back(`fel=${encodeURIComponent("Det gick inte att spara.")}`);
-
-  // Städa bort en ersatt uppladdad bild.
-  const old = storageName(cur?.image_path ?? null);
-  if (old && cur?.image_path !== image_path) await supabase.storage.from(BUCKET).remove([old]);
+  if (cur?.image_path !== image_path) await removeUploaded(supabase, BUCKET, cur?.image_path);
 
   revalidatePath("/prislista");
   revalidatePath(`/prislista/${id}`);

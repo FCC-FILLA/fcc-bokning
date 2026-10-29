@@ -331,3 +331,46 @@ describe("företagsuppgifter", () => {
   });
 });
 
+
+describe("offert på engelska", () => {
+  it("översätter grupper, artikelnamn och texter men lämnar egna radtexter", async () => {
+    const q = await db.query<{ id: string; share_token: string }>(
+      "insert into quotes (title, status, language) values ('English', 'skickad', 'en') returning id, share_token",
+    );
+    const id = q.rows[0].id;
+    await db.exec(`
+      insert into quote_lines (quote_id, group_id, article_id, description, sort_order) values
+        ('${id}', 'mat', (select id from articles where name = 'Konferenspaket heldag'), 'Konferenspaket heldag', 1),
+        ('${id}', 'mat', (select id from articles where name = 'Lunch Chef''s choice'), 'Lunch med egen meny', 2),
+        ('${id}', 'lokal', (select id from articles where name = 'Birka'), 'Birka', 3);
+    `);
+    const r = await db.query<{ q: { language: string; lines: { group: string; description: string; text: string | null }[]; settings: Record<string, string> } }>(
+      "select public_quote($1) as q",
+      [q.rows[0].share_token],
+    );
+    const { language, lines, settings } = r.rows[0].q;
+    expect(language).toBe("en");
+    const [birka, paket, lunch] = lines;
+    expect(birka).toMatchObject({ group: "Venue", description: "Birka" });
+    expect(birka.text).toMatch(/^One floor down/);
+    expect(paket).toMatchObject({ group: "Food & beverage", description: "Full-day conference package", text: "Morning coffee, lunch and afternoon coffee." });
+    expect(lunch.description).toBe("Lunch med egen meny");
+    expect(settings.look_closing_en).toMatch(/warm welcome/);
+    expect(settings.company_name).toBe("Filadelfia Convention Center");
+    expect(Object.keys(settings).some((k) => k.startsWith("quote_"))).toBe(false);
+  });
+
+  it("alla artiklar med svenska tecken eller ord har fått ett engelskt namn", async () => {
+    const r = await db.query<{ n: number }>("select count(*)::int n from articles where name_en is null and name ~ '[åäöÅÄÖ]' and name !~ '^Rörstrand [0-9]$'");
+    expect(r.rows[0].n).toBe(0);
+  });
+
+  it("quote_doc kan inte anropas utloggad", async () => {
+    await db.exec("set role anon");
+    try {
+      await expect(db.query("select quote_doc(gen_random_uuid())")).rejects.toThrow();
+    } finally {
+      await db.exec("reset role");
+    }
+  });
+});

@@ -20,7 +20,7 @@ export default async function QuotePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; skickad?: string; kopierad?: string; bekraftad?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; skickad?: string; kopierad?: string; bekraftad?: string; sprak?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -71,6 +71,7 @@ export default async function QuotePage({
       </div>
 
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
+      {sp.sprak && <Ok>Språket är bytt. Inledning och villkor har bytts till standardtexterna på det nya språket.</Ok>}
       {sp.sparat && <Ok>{sp.sparat === "rader" ? "Raderna är sparade." : "Offerten är sparad."}</Ok>}
       {sp.kopierad && <Ok>Kopian är skapad som utkast.</Ok>}
       {sp.bekraftad && <Ok>Evenemanget är nu Bekräftat.</Ok>}
@@ -180,10 +181,17 @@ export default async function QuotePage({
       <form action={updateQuote.bind(null, id)} className="card p-5 grid gap-4">
         <h2 className="text-lg font-semibold">Uppgifter och texter</h2>
         <fieldset disabled={locked} className="grid gap-4">
-          <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+          <div className="grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
             <div className="field">
               <label className="label" htmlFor="title">Rubrik</label>
               <input className="input" id="title" name="title" required defaultValue={quote.title} />
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="language">Språk till kunden</label>
+              <select className="input" id="language" name="language" defaultValue={quote.language ?? "sv"}>
+                <option value="sv">Svenska</option>
+                <option value="en">Engelska</option>
+              </select>
             </div>
             <div className="field">
               <label className="label" htmlFor="valid_until">Giltig till</label>
@@ -230,7 +238,8 @@ export default async function QuotePage({
             <label className="label" htmlFor="terms">Villkor</label>
             <textarea className="input min-h-48" id="terms" name="terms" defaultValue={quote.terms ?? ""} />
             <span className="text-sm text-muted">
-              Standardtexterna ändras under <Link className="underline" href="/installningar/offerttexter">Inställningar → Offerttexter</Link>.
+              Byter du språk byts inledning och villkor automatiskt om de inte är ändrade. Standardtexterna ändras under{" "}
+              <Link className="underline" href="/installningar/offert">Inställningar → Offert</Link>.
             </span>
           </div>
         </fieldset>

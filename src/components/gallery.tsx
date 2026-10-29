@@ -4,7 +4,8 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 
 /** Bild som öppnar ett bildspel om det finns fler bilder. */
-export function Gallery({ images, alt, sizes }: { images: string[]; alt: string; sizes: string }) {
+export function Gallery({ images, alt, sizes, lang = "sv" }: { images: string[]; alt: string; sizes: string; lang?: "sv" | "en" }) {
+  const en = lang === "en";
   const dialog = useRef<HTMLDialogElement>(null);
   const [i, setI] = useState(0);
   const more = images.length - 1;
@@ -15,7 +16,7 @@ export function Gallery({ images, alt, sizes }: { images: string[]; alt: string;
       <button
         type="button"
         className="group absolute inset-0 cursor-zoom-in"
-        aria-label={more > 0 ? `Visa ${images.length} bilder av ${alt}` : `Visa bild av ${alt}`}
+        aria-label={en ? (more > 0 ? `Show ${images.length} photos of ${alt}` : `Show photo of ${alt}`) : more > 0 ? `Visa ${images.length} bilder av ${alt}` : `Visa bild av ${alt}`}
         onClick={() => {
           setI(0);
           dialog.current?.showModal();
@@ -43,18 +44,18 @@ export function Gallery({ images, alt, sizes }: { images: string[]; alt: string;
         }}
       >
         <div className="relative aspect-[3/2] w-full">
-          <Image src={images[i]} alt={`${alt}, bild ${i + 1} av ${images.length}`} fill sizes="94vw" className="object-contain" />
+          <Image src={images[i]} alt={en ? `${alt}, photo ${i + 1} of ${images.length}` : `${alt}, bild ${i + 1} av ${images.length}`} fill sizes="94vw" className="object-contain" />
         </div>
         <div className="mt-3 flex items-center justify-between text-white">
           <span className="text-sm opacity-80">{alt} · {i + 1} / {images.length}</span>
           <div className="flex gap-2">
             {images.length > 1 && (
               <>
-                <button type="button" className="rounded-full bg-white/15 px-4 py-2 hover:bg-white/25" onClick={() => go(-1)} aria-label="Föregående bild">←</button>
-                <button type="button" className="rounded-full bg-white/15 px-4 py-2 hover:bg-white/25" onClick={() => go(1)} aria-label="Nästa bild">→</button>
+                <button type="button" className="rounded-full bg-white/15 px-4 py-2 hover:bg-white/25" onClick={() => go(-1)} aria-label={en ? "Previous photo" : "Föregående bild"}>←</button>
+                <button type="button" className="rounded-full bg-white/15 px-4 py-2 hover:bg-white/25" onClick={() => go(1)} aria-label={en ? "Next photo" : "Nästa bild"}>→</button>
               </>
             )}
-            <button type="button" className="rounded-full bg-white px-4 py-2 text-fg" onClick={() => dialog.current?.close()}>Stäng</button>
+            <button type="button" className="rounded-full bg-white px-4 py-2 text-fg" onClick={() => dialog.current?.close()}>{en ? "Close" : "Stäng"}</button>
           </div>
         </div>
       </dialog>

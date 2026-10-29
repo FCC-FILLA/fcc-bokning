@@ -59,7 +59,7 @@ export default async function PriceListPage({
     );
   };
 
-  if (sp.vy === "villkor") redirect("/installningar/offerttexter");
+  if (sp.vy === "villkor") redirect("/installningar/offert");
 
   return (
     <>

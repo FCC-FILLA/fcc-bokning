@@ -145,6 +145,7 @@ export type Quote = {
   valid_until: string | null;
   intro: string | null;
   terms: string | null;
+  language: "sv" | "en";
   share_token: string;
   sent_at: string | null;
   accepted_at: string | null;

@@ -20,6 +20,9 @@ Menyn är uppdelad i sektioner med underflikar: **Översikt**, **Kalender** (vec
 - **Kalenderprenumeration** (`/konto`): personlig iCal-länk för Outlook, Google och iPhone. Slutar fungera om användaren stängs av.
 - **Användare** (`/anvandare`, admin): roller, namn och aktiv/avstängd.
 - **Mallar** (`/mallar`): återkommande upplägg med lokaler och tider dag för dag (dag 1, dag 2 …) och offertrader. Skapa ett evenemang, och gärna ett offertutkast, från mallen med ett startdatum. Ett befintligt evenemang kan sparas som mall.
+- **Lokaler** (`/lokaler/<id>`): namn (även engelska), överordnad lokal, kvm, kapacitet per möblering, säljtext på svenska och engelska och flera bilder per lokal (huvudbild plus bildspel). Uppladdade bilder ligger i hinken `lokaler`.
+- **Offert på engelska:** språk väljs per offert. Kundsidan, PDF:en, gruppnamn, artikelnamn (`articles.name_en`), lokalnamn och texter visas på engelska. En rad vars text är ändrad för hand visas som den är. Hela dokumentet byggs av `quote_doc()` i databasen; kundlänken går via `public_quote()`.
+- **Inställningar → Offert:** inledning, avslutning och avtalsvillkor på svenska och engelska, giltighet, omslagsbild och vilka delar som visas.
 - **Kunder** med kontaktpersoner.
 - **Lokaler** med kapacitet per möblering.
 - **Roller:** Admin, Bokare, Produktion och Läsbehörighet. Admin och bokare ändrar bokningar, övriga läser. Reglerna ligger i databasen (Row Level Security), inte bara i gränssnittet.

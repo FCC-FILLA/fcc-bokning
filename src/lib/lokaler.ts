@@ -31,3 +31,16 @@ export function depthOf(rooms: Pick<Room, "id" | "parent_id">[], id: string): nu
   }
   return d;
 }
+
+type RoomImages = { id: string; parent_id: string | null; image_path: string | null; gallery?: string[] | null; active?: boolean; sort_order?: number };
+
+/** Samma regel som room_images() i databasen: huvudbild, egna extrabilder, sedan dellokalernas huvudbilder. */
+export function roomImages(rooms: RoomImages[], id: string): string[] {
+  const r = rooms.find((x) => x.id === id);
+  if (!r) return [];
+  const children = rooms
+    .filter((x) => x.parent_id === id && x.active !== false && x.image_path)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((x) => x.image_path!);
+  return [...new Set([r.image_path, ...(r.gallery ?? []), ...children].filter((p): p is string => !!p))];
+}
