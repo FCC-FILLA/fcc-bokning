@@ -16,6 +16,7 @@ import { StatusPill } from "@/components/status-pill";
 import { EventStaffing } from "@/components/event-staffing";
 import { EventPortalAdmin } from "@/components/event-portal-admin";
 import { EventTabs } from "@/components/event-tabs";
+import { EventInvoicing } from "@/components/event-invoicing";
 import { saveEventAsTemplate } from "../../mallar/actions";
 import {
   addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, moveOption, updateBooking, updateEvent,
@@ -342,6 +343,7 @@ export default async function EventPage({
                 </ul>
               )}
             </section>
+              <EventInvoicing eventId={id} quotes={quotes} />
               {company?.commission_pct ? (
                 <section className="card p-5 grid gap-1">
                   <h2 className="text-lg font-semibold">Provision</h2>

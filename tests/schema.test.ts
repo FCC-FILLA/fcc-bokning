@@ -829,3 +829,18 @@ describe("offertens egna lokaler", () => {
     expect(d.rows[0].d.rooms.map((r) => r.name)).toEqual(["Birka"]);
   });
 });
+
+describe("fakturaunderlag", () => {
+  it("numreras, summeras och låses när det skickats", async () => {
+    const ev = (await db.query<{ id: string }>("insert into events (title, status) values ('Faktura-test', 'bekraftad') returning id")).rows[0].id;
+    const inv = await asUser(ADMIN, () => db.query<{ id: string; number: number }>("insert into invoices (event_id, kind, percent) values ($1, 'del', 30) returning id, number", [ev]));
+    expect(inv.rows[0].number).toBeGreaterThanOrEqual(1001);
+    const id = inv.rows[0].id;
+    await db.query("insert into invoice_lines (invoice_id, description, quantity, unit_price, vat_rate) values ($1, 'Förskott', 1, 3000, 25), ($1, 'Avgår', 1, -1000, 25)", [id]);
+    const o = await db.query<{ total_ex_vat: string; total_vat: string }>("select total_ex_vat, total_vat from invoice_overview where id = $1", [id]);
+    expect(Number(o.rows[0].total_ex_vat)).toBe(2000);
+    expect(Number(o.rows[0].total_vat)).toBe(500);
+    await db.query("update invoices set status = 'skickad' where id = $1", [id]);
+    await expect(db.query("insert into invoice_lines (invoice_id, description) values ($1, 'Sent')", [id])).rejects.toThrow(/skickat/);
+  });
+});

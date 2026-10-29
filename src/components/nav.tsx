@@ -55,6 +55,7 @@ const SECTIONS: Section[] = [
     href: "/offerter",
     items: [
       { href: "/offerter", label: "Offerter" },
+      { href: "/fakturor", label: "Fakturaunderlag" },
       { href: "/kunder", label: "Kunder" },
     ],
   },

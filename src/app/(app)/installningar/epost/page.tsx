@@ -19,7 +19,7 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
   const { data } = await q;
   const mails = (data ?? []) as Mail[];
   const [{ data: st }, { count: sentCount }, { count: failCount }] = await Promise.all([
-    supabase.from("app_settings").select("key, value").in("key", ["mail_from", "mail_reply_to"]),
+    supabase.from("app_settings").select("key, value").in("key", ["mail_from", "mail_reply_to", "invoice_email_to", "payroll_email"]),
     supabase.from("email_outbox").select("id", { count: "exact", head: true }).eq("status", "skickad").not("sent_at", "is", null),
     supabase.from("email_outbox").select("id", { count: "exact", head: true }).eq("status", "fel"),
   ]);
@@ -42,7 +42,7 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
       <section className="card p-5 grid gap-3">
         <h2 className="text-lg font-semibold">Avsändare</h2>
         <p className="text-sm text-muted">{(sentCount ?? 0) > 0 ? `E-posten fungerar: ${sentCount} mejl skickade.` : "Inga mejl har skickats automatiskt ännu."}</p>
-        <form action={saveMailSettings} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <form action={saveMailSettings} className="grid gap-3 sm:grid-cols-2 sm:items-end">
           <div className="field">
             <label className="label" htmlFor="mail_from">Från</label>
             <input className="input" id="mail_from" name="mail_from" defaultValue={cfg.get("mail_from") ?? ""} disabled={!admin} placeholder="FCC Bokning <bokning@mail.filadelfiacc.se>" />
@@ -51,7 +51,15 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
             <label className="label" htmlFor="mail_reply_to">Svar till</label>
             <input className="input" id="mail_reply_to" name="mail_reply_to" type="email" defaultValue={cfg.get("mail_reply_to") ?? ""} disabled={!admin} placeholder="bokning@filadelfiacc.se" />
           </div>
-          {admin && <button className="btn" type="submit">Spara</button>}
+          <div className="field">
+            <label className="label" htmlFor="invoice_email_to">Fakturaunderlag skickas till</label>
+            <input className="input" id="invoice_email_to" name="invoice_email_to" type="email" defaultValue={cfg.get("invoice_email_to") ?? ""} disabled={!admin} placeholder="ekonomi@…" />
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="payroll_email">Tidsunderlag (lön) skickas till</label>
+            <input className="input" id="payroll_email" name="payroll_email" type="email" defaultValue={cfg.get("payroll_email") ?? ""} disabled={!admin} placeholder="lon@…" />
+          </div>
+          {admin && <div><button className="btn" type="submit">Spara</button></div>}
         </form>
         <form action={sendTestMail}>
           <button className="btn btn-ghost" type="submit">Skicka testmejl till mig</button>

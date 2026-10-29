@@ -110,6 +110,8 @@ export async function saveMailSettings(fd: FormData) {
   await supabase.from("app_settings").upsert([
     { key: "mail_from", value: String(fd.get("mail_from") ?? "").trim().slice(0, 200), updated_at: now },
     { key: "mail_reply_to", value: String(fd.get("mail_reply_to") ?? "").trim().slice(0, 200), updated_at: now },
+    { key: "invoice_email_to", value: String(fd.get("invoice_email_to") ?? "").trim().slice(0, 200), updated_at: now },
+    { key: "payroll_email", value: String(fd.get("payroll_email") ?? "").trim().slice(0, 200), updated_at: now },
   ]);
   revalidatePath("/installningar/epost");
   redirect("/installningar/epost?sparad=1");

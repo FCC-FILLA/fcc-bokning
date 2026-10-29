@@ -23,14 +23,18 @@ Deno.serve(async () => {
     if (!claimed?.length) continue;
     try {
       const attachments: { filename: string; content: string }[] = [];
-      if (m.attachment_path) {
-        const { data: file } = await db.storage.from("underlag").download(m.attachment_path);
-        if (file) {
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          let bin = "";
-          for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-          attachments.push({ filename: m.attachment_name ?? "bilaga", content: btoa(bin) });
-        }
+      const files: { bucket: string; path: string; name: string }[] = [
+        ...(m.attachment_path ? [{ bucket: "underlag", path: m.attachment_path, name: m.attachment_name ?? "bilaga" }] : []),
+        ...((Array.isArray(m.attachments) ? m.attachments : []) as { bucket: string; path: string; name: string }[]),
+      ];
+      for (const f of files) {
+        if (!["underlag", "dokument"].includes(f.bucket)) continue;
+        const { data: file } = await db.storage.from(f.bucket).download(f.path);
+        if (!file) continue;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        attachments.push({ filename: f.name || "bilaga", content: btoa(bin) });
       }
       const text = m.link ? `${m.body}\n\n${m.link}` : m.body;
       const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#2a1c1d;max-width:560px">
