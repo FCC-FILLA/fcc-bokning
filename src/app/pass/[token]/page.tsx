@@ -1,3 +1,4 @@
+import { StaffInfoBlocks, type StaffInfoBlock } from "@/components/staff-info";
 import { EventInfo, type StaffEventInfo } from "@/components/event-info";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -45,10 +46,11 @@ export default async function LinkPage({
   const sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(token)) notFound();
   const supabase = await createClient();
-  const [{ data }, company, { data: details }] = await Promise.all([
+  const [{ data }, company, { data: details }, { data: info }] = await Promise.all([
     supabase.rpc("link_shifts", { p_token: token }),
     loadCompany(supabase),
     supabase.rpc("link_details", { p_token: token }),
+    supabase.rpc("link_staff_info", { p_token: token }),
   ]);
   if (!data) notFound();
   const doc = data as { name: string; company: string | null; kind: "frilans" | "leverantor"; shifts: LinkShift[] };
@@ -135,6 +137,12 @@ export default async function LinkPage({
                 </li>
               ))}
             </ul>
+          </details>
+        )}
+        {((info ?? []) as StaffInfoBlock[]).length > 0 && (
+          <details className="card p-4" open={!pending.length && !upcoming.length}>
+            <summary className="cursor-pointer font-medium">Bra att veta</summary>
+            <div className="mt-3"><StaffInfoBlocks blocks={(info ?? []) as StaffInfoBlock[]} /></div>
           </details>
         )}
         {details && (

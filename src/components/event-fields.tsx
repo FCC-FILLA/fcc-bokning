@@ -97,6 +97,11 @@ export function EventFields({
           <textarea className="input" id="hospitality_info" name="hospitality_info" defaultValue={event?.hospitality_info ?? ""} />
         </div>
         <div className="field">
+          <label className="label" htmlFor="staff_info">Till personalen</label>
+          <textarea className="input" id="staff_info" name="staff_info" defaultValue={event?.staff_info ?? ""} placeholder="T.ex. entré för dagen, personalmat 16.30 i Karlberg, parkering …" />
+          <span className="text-xs text-muted">Syns för personalen på deras pass för evenemanget.</span>
+        </div>
+        <div className="field">
           <label className="label" htmlFor="internal_notes">Interna anteckningar</label>
           <textarea className="input" id="internal_notes" name="internal_notes" defaultValue={event?.internal_notes ?? ""} />
         </div>

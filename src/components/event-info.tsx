@@ -7,6 +7,7 @@ export type StaffEventInfo = {
   description: string | null;
   technical_info: string | null;
   hospitality_info: string | null;
+  staff_info?: string | null;
   responsible_name: string | null;
   responsible_email: string | null;
   bookings: { room: string; starts_at: string; ends_at: string }[];
@@ -15,6 +16,7 @@ export type StaffEventInfo = {
 
 export function EventInfo({ info, docHref }: { info: StaffEventInfo; docHref: (id: string) => string }) {
   const texts = [
+    { title: "Till personalen", text: info.staff_info ?? null },
     { title: "Om evenemanget", text: info.description },
     { title: "Teknik", text: info.technical_info },
     { title: "Mat och dryck", text: info.hospitality_info },

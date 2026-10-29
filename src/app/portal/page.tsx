@@ -1,3 +1,4 @@
+import { StaffInfoBlocks, type StaffInfoBlock } from "@/components/staff-info";
 import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
 import { EventInfo, type StaffEventInfo } from "@/components/event-info";
 import type { Metadata, Viewport } from "next";
@@ -45,6 +46,7 @@ const TABS = [
   { id: "mina", label: "Mina pass" },
   { id: "lediga", label: "Lediga pass" },
   { id: "tidigare", label: "Tidigare" },
+  { id: "info", label: "Bra att veta" },
   { id: "uppgifter", label: "Mina uppgifter" },
 ] as const;
 
@@ -52,8 +54,9 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const profile = await requireProfile();
   const supabase = await createClient();
-  const [{ data }, { data: me }, { data: details }] = await Promise.all([
+  const [{ data }, { data: info }, { data: details }, { data: me }] = await Promise.all([
     supabase.rpc("portal_shifts"),
+    supabase.rpc("my_staff_info"),
     supabase.rpc("my_details"),
     supabase.from("staff").select("name, staff_skills(staff_functions(name))").eq("profile_id", profile.id).maybeSingle(),
   ]);
@@ -123,7 +126,9 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         {tab === "lediga" && applied > 0 && <p className="text-sm text-muted">Du har sökt {applied} pass som väntar på besked.</p>}
 
         {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Tack! Dina uppgifter är sparade.</p>}
-        {tab === "uppgifter" ? (
+        {tab === "info" ? (
+          <StaffInfoBlocks blocks={(info ?? []) as StaffInfoBlock[]} />
+        ) : tab === "uppgifter" ? (
           details ? (
             <section className="card p-5 grid gap-3">
               <p className="text-sm text-muted">Uppgifterna används för lön, kontakt och om något händer under ett pass.</p>

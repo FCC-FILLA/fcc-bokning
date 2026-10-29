@@ -844,3 +844,25 @@ describe("fakturaunderlag", () => {
     await expect(db.query("insert into invoice_lines (invoice_id, description) values ($1, 'Sent')", [id])).rejects.toThrow(/skickat/);
   });
 });
+
+describe("personalinfo", () => {
+  it("koder visas bara när personen har ett pass nära i tid", async () => {
+    const st = await db.query<{ id: string; link_token: string }>("insert into staff (kind, name) values ('frilans', 'Info Frilans') returning id, link_token");
+    const titles = async () => {
+      await db.exec("set role anon");
+      try {
+        const r = await db.query<{ d: { title: string }[] }>("select link_staff_info($1) as d", [st.rows[0].link_token]);
+        return r.rows[0].d.map((x) => x.title);
+      } finally {
+        await db.exec("reset role");
+      }
+    };
+    expect(await titles()).not.toContain("Koder");
+    expect(await titles()).toContain("Personalmat");
+    const sh = await db.query<{ id: string }>(
+      "insert into shifts (function_id, starts_at, ends_at, staff_kind) values ((select id from staff_functions where name = 'Kiosk'), now() + interval '3 hours', now() + interval '8 hours', 'frilans') returning id",
+    );
+    await db.query("insert into shift_assignments (shift_id, staff_id, status) values ($1, $2, 'tilldelad')", [sh.rows[0].id, st.rows[0].id]);
+    expect(await titles()).toContain("Koder");
+  });
+});

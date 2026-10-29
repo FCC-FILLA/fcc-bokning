@@ -84,6 +84,7 @@ export type EventRow = {
   description: string | null;
   technical_info: string | null;
   hospitality_info: string | null;
+  staff_info?: string | null;
   internal_notes: string | null;
   created_at: string;
   updated_at: string;

@@ -26,6 +26,7 @@ const EventSchema = z.object({
   description: z.string().nullable(),
   technical_info: z.string().nullable(),
   hospitality_info: z.string().nullable(),
+  staff_info: z.string().nullable(),
   internal_notes: z.string().nullable(),
 });
 
@@ -42,6 +43,7 @@ function readEvent(fd: FormData) {
     description: opt(fd.get("description")),
     technical_info: opt(fd.get("technical_info")),
     hospitality_info: opt(fd.get("hospitality_info")),
+    staff_info: opt(fd.get("staff_info")),
     internal_notes: opt(fd.get("internal_notes")),
   };
   return EventSchema.safeParse(raw);
