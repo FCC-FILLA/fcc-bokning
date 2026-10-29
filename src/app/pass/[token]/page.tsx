@@ -46,7 +46,9 @@ export default async function LinkPage({ params }: { params: Promise<{ token: st
         <div className="mx-auto max-w-2xl px-4 py-5 grid gap-2">
           <p className="font-display font-semibold tracking-wide text-sm uppercase">{company.name}</p>
           <h1 className="font-display text-2xl font-semibold">{supplier && doc.company ? doc.company : doc.name}</h1>
-          <p className="text-sm opacity-85">{upcoming.length ? `${upcoming.length} kommande ${supplier ? "bokningar" : "pass"}` : `Inga kommande ${supplier ? "bokningar" : "pass"}`}</p>
+          <p className="text-sm opacity-85">{upcoming.length
+              ? `${upcoming.length} kommande ${supplier ? (upcoming.length === 1 ? "bokning" : "bokningar") : "pass"}`
+              : `Inga kommande ${supplier ? "bokningar" : "pass"}`}</p>
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-5 grid gap-5">
