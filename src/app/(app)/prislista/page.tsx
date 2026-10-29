@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArticleIcon } from "@/components/icon";
 import { isAdmin, requireProfile } from "@/lib/auth";
 import { fmtKr } from "@/lib/offert";
 import { createClient } from "@/lib/supabase/server";
 import type { Article, ArticleGroup, Room } from "@/lib/types";
-import { createArticle, saveSetting, updateArticle } from "./actions";
+import { createArticle, updateArticle } from "./actions";
 
 export const metadata = { title: "Prislista" };
 
@@ -21,16 +22,14 @@ export default async function PriceListPage({
   const admin = isAdmin(profile);
   const supabase = await createClient();
 
-  const [{ data: g }, { data: a }, { data: r }, { data: s }] = await Promise.all([
+  const [{ data: g }, { data: a }, { data: r }] = await Promise.all([
     supabase.from("article_groups").select("*").order("sort_order"),
     supabase.from("articles").select("*").order("sort_order"),
     supabase.from("rooms").select("id, name, sort_order, parent_id, image_path").eq("active", true).order("sort_order"),
-    supabase.from("app_settings").select("*"),
   ]);
   const groups = (g ?? []) as ArticleGroup[];
   const all = (a ?? []) as Article[];
   const rooms = (r ?? []) as Pick<Room, "id" | "name">[];
-  const settings = new Map(((s ?? []) as { key: string; value: string }[]).map((x) => [x.key, x.value]));
 
   const group = groups.some((x) => x.id === sp.grupp) ? sp.grupp! : "";
   const q = (sp.q ?? "").trim().toLowerCase();
@@ -60,38 +59,11 @@ export default async function PriceListPage({
     );
   };
 
-  if (sp.vy === "villkor") {
-    return (
-      <>
-        <Header admin={admin} vy="villkor" />
-        {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Sparat.</p>}
-        <div className="grid gap-5 max-w-3xl">
-          {[
-            { key: "quote_intro", label: "Inledning", help: "Visas överst i varje ny offert." },
-            { key: "quote_terms", label: "Villkor", help: "Kopieras in i varje ny offert och kan ändras per offert." },
-            { key: "quote_valid_days", label: "Giltighet i dagar", help: "Hur länge en ny offert gäller från att den skapas." },
-          ].map((x) => (
-            <form key={x.key} action={saveSetting.bind(null, x.key)} className="card p-5 grid gap-3">
-              <div>
-                <h2 className="text-lg font-semibold">{x.label}</h2>
-                <p className="text-sm text-muted">{x.help}</p>
-              </div>
-              {x.key === "quote_valid_days" ? (
-                <input className="input w-32" name="value" type="number" min={1} defaultValue={settings.get(x.key) ?? "30"} disabled={!admin} aria-label={x.label} />
-              ) : (
-                <textarea className="input min-h-40" name="value" defaultValue={settings.get(x.key) ?? ""} disabled={!admin} aria-label={x.label} />
-              )}
-              {admin && <div><button className="btn btn-primary" type="submit">Spara</button></div>}
-            </form>
-          ))}
-        </div>
-      </>
-    );
-  }
+  if (sp.vy === "villkor") redirect("/installningar/offerttexter");
 
   return (
     <>
-      <Header admin={admin} vy="artiklar" />
+      <Header admin={admin} />
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
       {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">{sp.sparad} är sparad.</p>}
       {missingCount > 0 && !missing && (
@@ -219,14 +191,10 @@ export default async function PriceListPage({
   );
 }
 
-function Header({ admin, vy }: { admin: boolean; vy: "artiklar" | "villkor" }) {
+function Header({ admin }: { admin: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
       <h1 className="text-2xl font-semibold">Prislista</h1>
-      <nav className="flex gap-1">
-        <Link href="/prislista" className={`btn ${vy === "artiklar" ? "btn-primary" : ""}`}>Artiklar</Link>
-        <Link href="/prislista?vy=villkor" className={`btn ${vy === "villkor" ? "btn-primary" : ""}`}>Offerttexter</Link>
-      </nav>
       <span className="flex-1" />
       {!admin && <span className="text-sm text-muted">Bara administratörer kan ändra prislistan.</span>}
     </div>

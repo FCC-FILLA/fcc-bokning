@@ -6,6 +6,8 @@ Internt bokningssystem för Filadelfia Convention Center: lokaler, kunder, evene
 
 ## Det som finns i fas 1
 
+Menyn är uppdelad i sektioner med underflikar: **Översikt**, **Kalender** (vecka, månad, dagsblad, ledig lokal, krockar), **Evenemang** (alla evenemang, mallar), **Försäljning** (offerter, kunder) och **Inställningar** (lokaler, prislista, offerttexter, användare, mitt konto). Menyn definieras i `src/components/nav.tsx`.
+
 - **Översikt** (startsidan): idag och i morgon, sådant som kräver åtgärd, beläggning två veckor framåt, offerter som väntar på svar och senaste ändringar.
 - **Vecka och månad:** vecka för vecka med en rad per lokal (klicka i en tom ruta för att boka), och en månadsvy.
 - **Evenemang:** status (förfrågan, preliminär med optionsdatum, bekräftad, genomförd, avbokad), kund, kontakt, ansvarig, deltagare, teknik, hospitality och interna anteckningar.
@@ -75,7 +77,7 @@ tests/                 tester
 
 ## Offerter
 
-- **Prislista** (`/prislista`): artiklar i grupper med pris, kostnad, moms och enhet. Lokalartiklar kan kopplas till en lokal och föreslås då automatiskt när en offert skapas från ett evenemang. Standardtexter för inledning, villkor och giltighet finns under *Offerttexter*. Bara admin ändrar.
+- **Prislista** (`/prislista`): artiklar i grupper med pris, kostnad, moms och enhet. Lokalartiklar kan kopplas till en lokal och föreslås då automatiskt när en offert skapas från ett evenemang. Standardtexter för inledning, villkor och giltighet finns under *Inställningar → Offerttexter* (`/installningar/offerttexter`). Bara admin ändrar.
 - **Offert** (`/offerter`): rader per grupp, rabatt per rad eller på alla rader, tillval som inte ingår i totalen, intern kalkyl med kostnad och marginal.
 - **Kundlänk** (`/offert/<token>`): en säljande sida med stor bild, kort om varje bokad lokal (bild, säljtext, kvm, kapacitet), programmet dag för dag, prisuppställning och godkänn-knapp. Bilderna ligger i `public/lokaler/` och kopplas till lokalen via `rooms.image_path`; säljtexten i `rooms.sales_text` (dellokaler ärver från huvudlokalen). Blir aktiv när offerten markeras som skickad. Kunden kan läsa, ladda ner PDF och godkänna eller avböja. Länken kräver ingen inloggning men visar bara just den offerten och aldrig kostnader.
 - **PDF** skapas på servern med `@react-pdf/renderer`, med omslagsbild och lokalkort.

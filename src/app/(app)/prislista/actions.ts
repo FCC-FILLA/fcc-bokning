@@ -73,8 +73,8 @@ export async function saveSetting(key: string, fd: FormData) {
   await requireAdmin();
   const supabase = await createClient();
   await supabase.from("app_settings").upsert({ key, value: String(fd.get("value") ?? ""), updated_at: new Date().toISOString() });
-  revalidatePath("/prislista");
-  back("sparad=Inställningen", "vy=villkor");
+  revalidatePath("/installningar/offerttexter");
+  redirect("/installningar/offerttexter?sparad=1");
 }
 
 const BUCKET = "artiklar";

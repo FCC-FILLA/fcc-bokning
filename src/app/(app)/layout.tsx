@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_LABEL } from "@/lib/types";
-import { Nav } from "@/components/nav";
+import { Nav, SubNav } from "@/components/nav";
 
 async function signOut() {
   "use server";
@@ -48,8 +48,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </form>
             </div>
           </div>
-          <Nav conflictCount={conflictCount} admin={isAdmin(profile)} />
+          <Nav conflictCount={conflictCount} />
         </div>
+        <SubNav conflictCount={conflictCount} admin={isAdmin(profile)} />
       </header>
       <main className="mx-auto max-w-[1500px] px-4 py-6 grid gap-5 print:p-0">{children}</main>
     </div>

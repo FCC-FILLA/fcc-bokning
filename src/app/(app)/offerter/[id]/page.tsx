@@ -230,7 +230,7 @@ export default async function QuotePage({
             <label className="label" htmlFor="terms">Villkor</label>
             <textarea className="input min-h-48" id="terms" name="terms" defaultValue={quote.terms ?? ""} />
             <span className="text-sm text-muted">
-              Standardtexterna ändras under <Link className="underline" href="/prislista?vy=villkor">Prislista → Offerttexter</Link>.
+              Standardtexterna ändras under <Link className="underline" href="/installningar/offerttexter">Inställningar → Offerttexter</Link>.
             </span>
           </div>
         </fieldset>
