@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStaffManager } from "@/lib/auth";
 import { addDays, localToIso } from "@/lib/datum";
+import { kickMail } from "@/lib/epost";
 import { notify, shiftLabel } from "@/lib/push";
 import { createClient } from "@/lib/supabase/server";
 
@@ -78,6 +79,7 @@ export async function createShift(fd: FormData) {
   }));
   const { data, error } = await supabase.from("shifts").insert(rows).select("id");
   if (error || !data?.length) fail(back, "Det gick inte att skapa passet.");
+  if (shift.staff_kind === "leverantor" && shift.supplier_id) await kickMail();
   if (shift.status === "oppen" && shift.staff_kind === "intern") {
     const { text } = await shiftLabel(supabase, data![0].id);
     await notify(
@@ -289,6 +291,7 @@ export async function sendInvites(shiftId: string) {
   const back = `/personal/pass/${shiftId}`;
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("advance_invites", { p_shift: shiftId });
+  if (data) await kickMail();
   refresh(back);
   if (error) fail(back, "Det gick inte att skicka inbjudningarna.");
   redirect(`${back}?inbjudna=${data ?? 0}#inbjudningar`);

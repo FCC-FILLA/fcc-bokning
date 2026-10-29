@@ -1,0 +1,161 @@
+import { canBook, canManageStaff, getProfile } from "@/lib/auth";
+import { fmtDate } from "@/lib/datum";
+import { createClient } from "@/lib/supabase/server";
+import {
+  addChecklistItem, addDefaultChecklist, deleteChecklistItem, deleteDocument, registerDocument, sendPortalLink, setDocumentFlag,
+  setPortalEnabled, toggleChecklistItem,
+} from "@/app/(app)/evenemang/eventsida-actions";
+import { CopyButton } from "@/components/copy-button";
+import { DocumentUpload } from "@/components/document-upload";
+
+type Item = { id: string; title: string; note: string | null; due_date: string | null; customer_visible: boolean; customer_can_check: boolean; done_at: string | null; done_by: string | null };
+type Doc = { id: string; name: string; size_bytes: number | null; public: boolean; staff: boolean; created_at: string };
+
+const size = (n: number | null) => (n == null ? "" : n > 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
+
+/** Kundens eventsida: länk, checklista och dokument. Visas på evenemanget. */
+export async function EventPortalAdmin({ eventId, sent, error }: { eventId: string; sent?: string; error?: string }) {
+  const p = await getProfile();
+  const editor = canBook(p) || canManageStaff(p);
+  const supabase = await createClient();
+  const [{ data: ev }, { data: items }, { data: docs }, { data: site }] = await Promise.all([
+    supabase.from("events").select("share_token, portal_enabled, status, contacts(email), companies(email)").eq("id", eventId).single(),
+    supabase.from("event_checklist").select("*").eq("event_id", eventId).order("due_date", { nullsFirst: false }).order("sort_order"),
+    supabase.from("event_documents").select("id, name, size_bytes, public, staff, created_at").eq("event_id", eventId).order("created_at", { ascending: false }),
+    supabase.from("app_settings").select("value").eq("key", "site_url").maybeSingle(),
+  ]);
+  if (!ev) return null;
+  const e = ev as unknown as { share_token: string; portal_enabled: boolean; status: string; contacts: { email: string | null } | null; companies: { email: string | null } | null };
+  const active = e.portal_enabled || e.status === "bekraftad" || e.status === "genomford";
+  const url = `${site?.value ?? "https://fcc-bokning.vercel.app"}/event/${e.share_token}`;
+  const list = (items ?? []) as Item[];
+  const documents = (docs ?? []) as Doc[];
+  const today = new Date().toISOString().slice(0, 10);
+
+  return (
+    <section id="eventsida" className="card p-5 grid gap-5 scroll-mt-28">
+      <div className="flex flex-wrap items-center gap-3">
+        <h2 className="text-lg font-semibold">Kundens eventsida</h2>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${active ? "bg-st-genomford-soft text-ok" : "bg-sunk text-muted"}`}>
+          {active ? "Öppen för kunden" : "Stängd tills evenemanget är bekräftat"}
+        </span>
+      </div>
+      {error && <p className="rounded-lg bg-warn-soft px-4 py-2 text-sm text-warn">{error}</p>}
+      {sent && <p className="rounded-lg bg-st-genomford-soft px-4 py-2 text-sm text-ok">Länken ligger i e-postkön till kunden.</p>}
+
+      <div className="grid gap-2">
+        <p className="text-sm text-muted">
+          Kunden ser program och tider, skickade offerter, checklistan och de dokument ni gjort publika. Inga interna anteckningar, kostnader eller
+          personaluppgifter.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="break-all rounded bg-sunk px-2 py-1 text-xs">{url}</code>
+          <CopyButton text={url} label="Kopiera" />
+          <a className="btn btn-ghost" href={`/event/${e.share_token}`} target="_blank" rel="noreferrer">Öppna ↗</a>
+          {editor && !active && (
+            <form action={setPortalEnabled.bind(null, eventId, true)}><button className="btn" type="submit">Öppna redan nu</button></form>
+          )}
+          {editor && e.portal_enabled && e.status !== "bekraftad" && e.status !== "genomford" && (
+            <form action={setPortalEnabled.bind(null, eventId, false)}><button className="btn btn-ghost" type="submit">Stäng igen</button></form>
+          )}
+        </div>
+        {editor && active && (
+          <form action={sendPortalLink.bind(null, eventId)} className="flex flex-wrap items-end gap-2">
+            <div className="field">
+              <label className="label" htmlFor="portal-to">Skicka länken till</label>
+              <input className="input w-72" id="portal-to" name="to" type="email" defaultValue={e.contacts?.email ?? e.companies?.email ?? ""} placeholder="kundens e-post" />
+            </div>
+            <button className="btn" type="submit">Skicka</button>
+          </form>
+        )}
+      </div>
+
+      <div className="grid gap-2 border-t border-line pt-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-semibold">Checklista</h3>
+          <span className="text-sm text-muted">{list.filter((x) => x.done_at).length} av {list.length} klara</span>
+          {editor && (
+            <form action={addDefaultChecklist.bind(null, eventId)} className="ml-auto">
+              <button className="btn btn-ghost text-sm" type="submit">Lägg till standardpunkter</button>
+            </form>
+          )}
+        </div>
+        {list.length > 0 && (
+          <ul className="divide-y divide-line rounded-lg border border-line">
+            {list.map((x) => {
+              const late = !x.done_at && x.due_date && x.due_date < today;
+              return (
+                <li key={x.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                  <form action={toggleChecklistItem.bind(null, eventId, x.id, !x.done_at)}>
+                    <button type="submit" disabled={!editor} aria-label={x.done_at ? `Markera ${x.title} som ej klar` : `Markera ${x.title} som klar`}
+                      className={`grid size-5 place-items-center rounded border ${x.done_at ? "bg-ok border-ok text-white" : "border-muted"}`}>
+                      {x.done_at ? "✓" : ""}
+                    </button>
+                  </form>
+                  <span className={`flex-1 min-w-48 ${x.done_at ? "line-through text-muted" : ""}`}>
+                    {x.title}
+                    {x.note && <span className="block text-xs text-muted">{x.note}</span>}
+                    {x.done_at && <span className="block text-xs text-muted">Klar {fmtDate(x.done_at)}{x.done_by ? ` av ${x.done_by}` : ""}</span>}
+                  </span>
+                  {x.due_date && <span className={`text-sm tabular-nums ${late ? "text-warn font-semibold" : "text-muted"}`}>senast {fmtDate(x.due_date)}</span>}
+                  <span className="text-xs text-muted">{x.customer_visible ? (x.customer_can_check ? "kunden bockar av" : "kunden ser") : "bara internt"}</span>
+                  {editor && (
+                    <form action={deleteChecklistItem.bind(null, eventId, x.id)}>
+                      <button className="btn btn-ghost px-2 text-sm text-warn" type="submit" aria-label={`Ta bort ${x.title}`}>✕</button>
+                    </form>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {editor && (
+          <form action={addChecklistItem.bind(null, eventId)} className="flex flex-wrap items-end gap-2">
+            <div className="field grow min-w-56"><label className="label" htmlFor="cl-title">Ny punkt</label><input className="input" id="cl-title" name="title" required placeholder="T.ex. Skicka gästlista" /></div>
+            <div className="field"><label className="label" htmlFor="cl-due">Senast</label><input className="input" id="cl-due" name="due_date" type="date" /></div>
+            <label className="flex items-center gap-1.5 text-sm pb-2"><input type="checkbox" name="customer_visible" defaultChecked /> Kunden ser</label>
+            <label className="flex items-center gap-1.5 text-sm pb-2"><input type="checkbox" name="customer_can_check" defaultChecked /> Kunden bockar av</label>
+            <button className="btn" type="submit">Lägg till</button>
+          </form>
+        )}
+      </div>
+
+      <div className="grid gap-2 border-t border-line pt-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="font-semibold">Dokument</h3>
+          <span className="text-xs text-muted">Nya dokument är dolda för kunden. Projektmappen i Google Drive kopplas in senare.</span>
+        </div>
+        {documents.length > 0 && (
+          <ul className="divide-y divide-line rounded-lg border border-line">
+            {documents.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                <a className="font-medium hover:underline flex-1 min-w-48 break-all" href={`/evenemang/${eventId}/fil/${d.id}`}>{d.name}</a>
+                <span className="text-xs text-muted">{size(d.size_bytes)} · {fmtDate(d.created_at)}</span>
+                {editor ? (
+                  <>
+                    <form action={setDocumentFlag.bind(null, eventId, d.id, "public", !d.public)}>
+                      <button className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${d.public ? "bg-st-genomford-soft text-ok" : "bg-sunk text-muted"}`} type="submit">
+                        {d.public ? "Kunden ser" : "Dold för kund"}
+                      </button>
+                    </form>
+                    <form action={setDocumentFlag.bind(null, eventId, d.id, "staff", !d.staff)}>
+                      <button className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${d.staff ? "bg-st-forfragan-soft text-st-forfragan" : "bg-sunk text-muted"}`} type="submit">
+                        {d.staff ? "Personal ser" : "Dold för personal"}
+                      </button>
+                    </form>
+                    <form action={deleteDocument.bind(null, eventId, d.id)}>
+                      <button className="btn btn-ghost px-2 text-sm text-warn" type="submit" aria-label={`Ta bort ${d.name}`}>✕</button>
+                    </form>
+                  </>
+                ) : (
+                  <span className="text-xs text-muted">{d.public ? "Kunden ser" : "Dold för kund"}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {editor && <DocumentUpload eventId={eventId} register={registerDocument} />}
+      </div>
+    </section>
+  );
+}

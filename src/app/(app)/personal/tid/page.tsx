@@ -26,7 +26,7 @@ const CHIP: Record<AttestStatus, string> = {
 export default async function TimePage({
   searchParams,
 }: {
-  searchParams: Promise<{ manad?: string; fel?: string; attesterade?: string; avvisad?: string; sparad?: string; last?: string; upplast?: string; visa?: string }>;
+  searchParams: Promise<{ manad?: string; fel?: string; attesterade?: string; avvisad?: string; sparad?: string; last?: string; upplast?: string; visa?: string; mejlat?: string }>;
 }) {
   const sp = await searchParams;
   const profile = await requireProfile();
@@ -78,7 +78,11 @@ export default async function TimePage({
       {sp.attesterade && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">{sp.attesterade} pass attesterade.</p>}
       {sp.avvisad && <p className="rounded-lg bg-sunk px-4 py-3 text-sm">Tiden är avvisad och personen ser din kommentar.</p>}
       {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Sparat.</p>}
-      {sp.last && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Månaden är låst. Ladda ner underlaget och skicka det till ekonomi.</p>}
+      {sp.last && (
+        <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">
+          {sp.mejlat ? `Månaden är låst och underlaget är skickat till ${payrollEmail} (via e-postkön).` : "Månaden är låst. Lägg in ekonomis e-post nedan så skickas underlaget automatiskt nästa gång, eller ladda ner det."}
+        </p>
+      )}
       {sp.upplast && <p className="rounded-lg bg-sunk px-4 py-3 text-sm">Månaden är upplåst.</p>}
 
       <div className="grid gap-3 sm:grid-cols-4">
@@ -129,7 +133,7 @@ export default async function TimePage({
               <input className="input w-72" id="payroll_email" name="payroll_email" type="email" defaultValue={payrollEmail} placeholder="ekonomi@filadelfiacc.se" />
             </div>
             <button className="btn btn-ghost" type="submit">Spara</button>
-            <span className="text-xs text-muted pb-2">När e-post är kopplat skickas underlaget automatiskt när månaden låses.</span>
+            <span className="text-xs text-muted pb-2">Underlaget mejlas automatiskt som Excel när månaden låses.</span>
           </form>
         )}
       </section>

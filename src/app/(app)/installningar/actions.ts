@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
 import { isFccPhoto, storagePath, uploadImage } from "@/lib/bilder";
+import { kickMail } from "@/lib/epost";
 import { COMPANY_FIELDS } from "@/lib/foretag";
 import { createClient } from "@/lib/supabase/server";
 
@@ -99,4 +100,34 @@ export async function setMailStatus(id: string, status: "skickad" | "struken") {
   await supabase.from("email_outbox").update({ status, sent_at: status === "skickad" ? new Date().toISOString() : null }).eq("id", id);
   revalidatePath("/installningar/epost");
   redirect("/installningar/epost");
+}
+
+/** Avsändare och svarsadress för all e-post från appen. */
+export async function saveMailSettings(fd: FormData) {
+  if (!isAdmin(await requireProfile())) redirect("/installningar/epost?fel=" + encodeURIComponent("Bara administratörer kan ändra."));
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  await supabase.from("app_settings").upsert([
+    { key: "mail_from", value: String(fd.get("mail_from") ?? "").trim().slice(0, 200), updated_at: now },
+    { key: "mail_reply_to", value: String(fd.get("mail_reply_to") ?? "").trim().slice(0, 200), updated_at: now },
+  ]);
+  revalidatePath("/installningar/epost");
+  redirect("/installningar/epost?sparad=1");
+}
+
+/** Lägger ett testmejl till mig själv i kön och puffar avsändaren. */
+export async function sendTestMail() {
+  const me = await requireProfile();
+  if (!me.email) redirect("/installningar/epost?fel=" + encodeURIComponent("Ditt konto saknar e-postadress."));
+  const supabase = await createClient();
+  await supabase.from("email_outbox").insert({
+    to_email: me.email,
+    to_name: me.full_name || null,
+    subject: "Testmejl från FCC Bokning",
+    body: "Hej!\n\nOm du läser det här fungerar e-posten från FCC Bokning.",
+    kind: "test",
+  });
+  await kickMail();
+  revalidatePath("/installningar/epost");
+  redirect("/installningar/epost?test=1");
 }

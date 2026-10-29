@@ -611,3 +611,65 @@ describe("inbjudningskedja för frilans", () => {
     expect(b.rows[0].status).toBe("tilldelad");
   });
 });
+
+describe("eventlänk", () => {
+  it("öppnas när evenemanget är bekräftat och visar offerter, checklista och bara publika dokument", async () => {
+    const ev = await book("Årsmöte", "preliminar", "Birka", "2027-08-20T09:00+02", "2027-08-20T17:00+02");
+    const tok = (await db.query<{ share_token: string }>("select share_token from events where id = $1", [ev])).rows[0].share_token;
+    await db.query("insert into event_checklist (event_id, title, due_date) values ($1, 'Slutligt antal gäster', '2027-08-06')", [ev]);
+    await db.query("insert into event_checklist (event_id, title, customer_visible) values ($1, 'Intern punkt', false)", [ev]);
+    await db.query("insert into event_documents (event_id, name, storage_path, public) values ($1, 'Program.pdf', 'x/program.pdf', true), ($1, 'Intern kalkyl.xlsx', 'x/kalkyl.xlsx', false)", [ev]);
+    await db.query("insert into quotes (title, status, event_id) values ('Årsmöte', 'skickad', $1), ('Utkast', 'utkast', $1)", [ev]);
+
+    await db.exec("set role anon");
+    try {
+      const closed = await db.query<{ d: unknown }>("select event_portal($1) as d", [tok]);
+      expect(closed.rows[0].d).toBeNull();
+    } finally {
+      await db.exec("reset role");
+    }
+    await db.query("update events set status = 'bekraftad' where id = $1", [ev]);
+    const docId = async (n: string) => (await db.query<{ id: string }>("select id from event_documents where name = $1", [n])).rows[0].id;
+    const pubId = await docId("Program.pdf");
+    const privId = await docId("Intern kalkyl.xlsx");
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ d: { checklist: { id: string; title: string }[]; documents: { name: string }[]; quotes: { title: string }[]; bookings: unknown[] } }>(
+        "select event_portal($1) as d",
+        [tok],
+      );
+      const d = r.rows[0].d;
+      expect(d.bookings).toHaveLength(1);
+      expect(d.checklist.map((x) => x.title)).toEqual(["Slutligt antal gäster"]);
+      expect(d.documents.map((x) => x.name)).toEqual(["Program.pdf"]);
+      expect(d.quotes.map((x) => x.title)).toEqual(["Årsmöte"]);
+      expect(JSON.stringify(d)).not.toMatch(/internal_notes|cost/);
+      expect((await db.query<{ r: string }>("select event_portal_check($1, $2, true, 'Kund') as r", [tok, d.checklist[0].id])).rows[0].r).toBe("ok");
+      const pub = await db.query<{ p: string | null }>("select document_for_link($1, $2) as p", [tok, pubId]);
+      expect(pub.rows[0].p).toBe("x/program.pdf");
+      const priv = await db.query<{ p: string | null }>("select document_for_link($1, $2) as p", [tok, privId]);
+      expect(priv.rows[0].p).toBeNull();
+    } finally {
+      await db.exec("reset role");
+    }
+    const done = await db.query<{ done_by: string }>("select done_by from event_checklist where title = 'Slutligt antal gäster'");
+    expect(done.rows[0].done_by).toBe("Kund");
+  });
+
+  it("personal ser evenemangets information men inga priser", async () => {
+    const ANNA = "00000000-0000-0000-0000-0000000000c1";
+    const ev = (await db.query<{ id: string }>("select id from events where title = 'Årsmöte'")).rows[0].id;
+    await db.query("update events set technical_info = 'Två mikrofoner', internal_notes = 'Hemligt' where id = $1", [ev]);
+    const sh = await db.query<{ id: string }>(
+      `insert into shifts (event_id, function_id, starts_at, ends_at) values ($1, (select id from staff_functions where name = 'Garderob'), '2027-08-20T08:00+02', '2027-08-20T18:00+02') returning id`,
+      [ev],
+    );
+    await db.query("insert into shift_assignments (shift_id, staff_id, status) values ($1, (select id from staff where email = 'anna@exempel.se'), 'tilldelad')", [sh.rows[0].id]);
+    await asUser(ANNA, async () => {
+      const r = await db.query<{ s: { id: string; event_info: Record<string, unknown> | null }[] }>("select portal_shifts() as s");
+      const info = r.rows[0].s.find((x) => x.id === sh.rows[0].id)!.event_info!;
+      expect(info.technical_info).toBe("Två mikrofoner");
+      expect(JSON.stringify(info)).not.toMatch(/Hemligt|price|cost|quote/);
+    });
+  });
+});

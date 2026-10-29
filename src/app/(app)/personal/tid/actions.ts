@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireStaffManager } from "@/lib/auth";
 import { localToIso } from "@/lib/datum";
-import { monthRange } from "@/lib/personal";
+import { kickMail } from "@/lib/epost";
+import { fmtKr } from "@/lib/offert";
+import { monthLabel, monthRange } from "@/lib/personal";
+import { buildMonthWorkbook } from "@/lib/tid-excel";
 import { notify } from "@/lib/push";
 import { createClient } from "@/lib/supabase/server";
 
@@ -70,8 +73,36 @@ export async function lockMonth(month: string) {
   const me = await requireStaffManager();
   const supabase = await createClient();
   const { error } = await supabase.from("time_periods").upsert({ month: `${month}-01`, locked_at: new Date().toISOString(), locked_by: me.id });
+  if (error) back(month, `fel=${encodeURIComponent("Det gick inte att låsa månaden.")}`);
+  const queued = await queuePayrollMail(month, me.full_name || me.email || "");
   revalidatePath("/personal/tid");
-  back(month, error ? `fel=${encodeURIComponent("Det gick inte att låsa månaden.")}` : "last=1");
+  back(month, queued ? "last=1&mejlat=1" : "last=1");
+}
+
+/** Lägger underlaget som Excel i e-postkön till ekonomi (om en adress finns). */
+async function queuePayrollMail(month: string, who: string) {
+  const supabase = await createClient();
+  const { data: setting } = await supabase.from("app_settings").select("value").eq("key", "payroll_email").maybeSingle();
+  const to = String(setting?.value ?? "").trim();
+  if (!to) return false;
+  const { buffer, summary } = await buildMonthWorkbook(supabase, month);
+  const name = `Tidsunderlag-${month}.xlsx`;
+  const path = `${month}/${Date.now()}-${name}`;
+  const { error } = await supabase.storage
+    .from("underlag")
+    .upload(path, buffer, { contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  if (error) return false;
+  await supabase.from("email_outbox").insert({
+    to_email: to,
+    subject: `Tidsunderlag ${monthLabel(month)}`,
+    body: `Hej!\n\nHär kommer attesterat tidsunderlag för ${monthLabel(month)}: ${summary.shifts} pass, ${summary.hours.toLocaleString("sv-SE")} timmar, ${fmtKr(summary.amount)}.\n\nExcel-filen är bifogad. Månaden låstes av ${who}.\n\nFCC Bokning`,
+    kind: "lon",
+    attachment_path: path,
+    attachment_name: name,
+  });
+  await supabase.from("time_periods").update({ exported_at: new Date().toISOString() }).eq("month", `${month}-01`);
+  await kickMail();
+  return true;
 }
 
 export async function unlockMonth(month: string) {

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { localToIso } from "@/lib/datum";
+import { kickMail } from "@/lib/epost";
 import { createClient } from "@/lib/supabase/server";
 
 const MSG: Record<string, string> = {
@@ -24,6 +25,7 @@ export async function respond(token: string, shiftId: string, accept: boolean) {
   if (!valid(token, shiftId)) redirect("/");
   const supabase = await createClient();
   const { data } = await supabase.rpc("link_respond", { p_token: token, p_shift: shiftId, p_accept: accept });
+  if (data === "ok") await kickMail();
   revalidatePath(`/pass/${token}`);
   redirect(`/pass/${token}?${data === "ok" ? (accept ? "ja=1" : "nej=1") : `fel=${encodeURIComponent(MSG[String(data)] ?? "Något gick fel.")}`}`);
 }

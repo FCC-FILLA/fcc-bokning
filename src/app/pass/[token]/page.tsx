@@ -1,3 +1,4 @@
+import { EventInfo, type StaffEventInfo } from "@/components/event-info";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { fmtDate, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
@@ -17,6 +18,7 @@ type LinkShift = {
   title: string | null;
   note: string | null;
   event: string | null;
+  event_info: StaffEventInfo | null;
   room: string | null;
   needed: number;
   status: "tilldelad" | "inbjuden";
@@ -69,6 +71,7 @@ export default async function LinkPage({
       </div>
       {(s.event || s.room) && <p className="text-sm text-muted">{[s.event, s.room].filter(Boolean).join(" · ")}</p>}
       {s.note && <p className="text-sm">{s.note}</p>}
+      {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/pass/${token}/fil/${id}`} />}
       {s.status === "inbjuden" && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line pt-2">
           <form action={respond.bind(null, token, s.id, true)}><button className="btn btn-primary" type="submit">{supplier ? "Bekräfta bokningen" : "Ja, jag tar passet"}</button></form>
