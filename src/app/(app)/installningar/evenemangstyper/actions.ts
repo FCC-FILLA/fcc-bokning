@@ -34,7 +34,7 @@ export async function saveEventType(id: string, fd: FormData) {
   if (!name) fail("Ange ett namn.");
   const cover_image = await pick(supabase, fd, "cover_image", cur?.cover_image ?? null, `${name}, omslag`);
   const about_image = await pick(supabase, fd, "about_image", cur?.about_image ?? null, `${name}, textblock`);
-  const { error } = await supabase.from("event_types").update({ name, cover_image, about_image, sort_order: Number(fd.get("sort_order")) || 0 }).eq("id", id);
+  const { error } = await supabase.from("event_types").update({ name, cover_image, about_image, sort_order: Number(fd.get("sort_order")) || 0, color: /^#[0-9a-f]{6}$/i.test(String(fd.get("color"))) ? String(fd.get("color")) : null }).eq("id", id);
   if (error) fail("Det gick inte att spara.");
   revalidatePath("/", "layout");
   redirect(`${PATH}?sparad=1#typ-${id}`);

@@ -8,14 +8,14 @@ import { addEventType, deleteEventType, saveEventType } from "./actions";
 
 export const metadata = { title: "Evenemangstyper" };
 
-type EventType = { id: string; name: string; sort_order: number; cover_image: string | null; about_image: string | null };
+type EventType = { id: string; name: string; sort_order: number; color: string | null; cover_image: string | null; about_image: string | null };
 
 export default async function EventTypesPage({ searchParams }: { searchParams: Promise<{ fel?: string; sparad?: string; borttagen?: string }> }) {
   const sp = await searchParams;
   const admin = isAdmin(await requireProfile());
   const supabase = await createClient();
   const [{ data }, library, { data: counts }] = await Promise.all([
-    supabase.from("event_types").select("id, name, sort_order, cover_image, about_image").order("sort_order"),
+    supabase.from("event_types").select("id, name, sort_order, color, cover_image, about_image").order("sort_order"),
     loadLibrary(supabase),
     supabase.from("events").select("event_type_id").not("event_type_id", "is", null),
   ]);
@@ -28,7 +28,7 @@ export default async function EventTypesPage({ searchParams }: { searchParams: P
       <div className="grid gap-1">
         <h1 className="text-2xl font-semibold">Evenemangstyper</h1>
         <p className="text-sm text-muted max-w-3xl">
-          Varje typ kan ha en egen omslagsbild och bild till textblocket. De används i offerten och på kundens eventsida när evenemanget har den typen.
+          Varje typ har en färg som syns i kalendern och kan ha en egen omslagsbild och bild till textblocket. De används i offerten och på kundens eventsida när evenemanget har den typen.
           Utan egen bild används den allmänna från Inställningar → Offert.
         </p>
       </div>
@@ -40,6 +40,7 @@ export default async function EventTypesPage({ searchParams }: { searchParams: P
           <fieldset disabled={!admin} className="grid gap-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="field grow min-w-48"><label className="label" htmlFor={`name-${t.id}`}>Namn</label><input className="input" id={`name-${t.id}`} name="name" defaultValue={t.name} required /></div>
+              <div className="field w-24"><label className="label" htmlFor={`color-${t.id}`}>Färg</label><input className="input h-10 p-1" id={`color-${t.id}`} name="color" type="color" defaultValue={t.color ?? "#6b6b6b"} /></div>
               <div className="field w-24"><label className="label" htmlFor={`sort-${t.id}`}>Ordning</label><input className="input" id={`sort-${t.id}`} name="sort_order" type="number" defaultValue={t.sort_order} /></div>
               <span className="text-sm text-muted pb-2">{used.get(t.id) ?? 0} evenemang</span>
             </div>

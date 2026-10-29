@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { canBook, requireProfile } from "@/lib/auth";
+import { canBook, canManageStaff, requireProfile } from "@/lib/auth";
+import { loadEventTypes } from "@/lib/typer";
 import {
-  addDays, dayShort, dayStartIso, fmtDate, fmtDayMonth, fmtTime, isoToDate, todayDate, weekday,
+  addDays, dayShort, dayStartIso, fmtDate, fmtDayMonth, fmtTime, isoToDate, todayDate,
 } from "@/lib/datum";
-import { makeOverlap } from "@/lib/lokaler";
 import { QUOTE_STATUS_LABEL, fmtKr } from "@/lib/offert";
 import { createClient } from "@/lib/supabase/server";
 import { STATUS_LABEL, type BookingConflict, type EventStatus, type QuoteOverview, type Room } from "@/lib/types";
@@ -17,7 +17,7 @@ type BookingRow = {
   starts_at: string;
   ends_at: string;
   event_id: string;
-  events: { title: string; status: EventStatus; company_id: string | null };
+  events: { title: string; status: EventStatus; company_id: string | null; event_type_id: string | null };
 };
 
 const ACTIVE: EventStatus[] = ["forfragan", "preliminar", "bekraftad"];
@@ -61,7 +61,7 @@ export default async function DashboardPage() {
     supabase.from("rooms").select("*").eq("active", true).eq("bookable", true).order("sort_order"),
     supabase
       .from("bookings")
-      .select("id, room_id, starts_at, ends_at, event_id, events!inner(title, status, company_id)")
+      .select("id, room_id, starts_at, ends_at, event_id, events!inner(title, status, company_id, event_type_id)")
       .in("events.status", ACTIVE)
       .lt("starts_at", dayStartIso(horizon))
       .gt("ends_at", dayStartIso(today))
@@ -81,10 +81,15 @@ export default async function DashboardPage() {
     supabase.from("event_overview").select("id, title, created_at, company_name, starts_at").eq("status", "forfragan").order("created_at").limit(50),
   ]);
 
+  const [types, { data: noteData }] = await Promise.all([
+    loadEventTypes(supabase),
+    supabase.from("notifications").select("id, title, body, link, created_at, read_at").eq("profile_id", profile.id).order("created_at", { ascending: false }).limit(6),
+  ]);
+  const typeColor = new Map(types.map((t) => [t.id, t.color]));
+  const latestNotes = (noteData ?? []) as { id: string; title: string; body: string | null; link: string | null; created_at: string; read_at: string | null }[];
   const rooms = (roomData ?? []) as Room[];
   const bookings = (bookingData ?? []) as unknown as BookingRow[];
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
-  const overlap = makeOverlap(rooms);
 
   // Idag och i morgon: ett kort per evenemang med lokaler och tider.
   const dayEvents = (d: string) => {
@@ -138,19 +143,21 @@ export default async function DashboardPage() {
   const missingPeople = understaffed.reduce((n, x) => n + x.needed - x.filled, 0);
   const actionCount = conflicts.length + options.length + expiredSent.length + oldInquiries.length + understaffed.length;
 
-  // Beläggning: huvudsalarna kommande 14 dagar. En sal räknas som bokad om den eller någon del av den är bokad.
-  // Salar på översta nivån med yta (kök och kontrollrum utelämnas).
-  const heatRooms = rooms.filter((r) => !r.parent_id && r.kvm != null);
-  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(today, i));
-  const cell = (roomId: string, d: string) => {
-    const start = dayStartIso(d);
-    const end = dayStartIso(addDays(d, 1));
-    const hits = bookings.filter((b) => b.starts_at < end && b.ends_at > start && overlap(b.room_id, roomId));
-    if (!hits.length) return null;
-    const full = hits.some((b) => b.room_id === roomId);
-    const confirmed = hits.some((b) => b.events.status === "bekraftad");
-    return { full, confirmed, titles: [...new Set(hits.map((h) => h.events.title))] };
-  };
+  // Kommande veckan: ett evenemang per dag med tider och lokaler.
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i));
+  const weekByDay = new Map<string, { id: string; title: string; status: EventStatus; color: string; from: string; to: string; rooms: string[] }[]>();
+  for (const d of weekDays) {
+    const list = dayEvents(d).map((e) => {
+      const start = dayStartIso(d);
+      const end = dayStartIso(addDays(d, 1));
+      const from = e.slots.map((b) => (b.starts_at < start ? "00:00" : fmtTime(b.starts_at))).sort()[0];
+      const to = e.slots.map((b) => (b.ends_at > end ? "24:00" : fmtTime(b.ends_at))).sort().at(-1)!;
+      const type = e.slots[0].events.event_type_id;
+      return { id: e.id, title: e.title, status: e.status, from, to, rooms: [...new Set(e.slots.map((b) => roomName.get(b.room_id) ?? ""))].filter(Boolean), color: (type && typeColor.get(type)) || "var(--color-line)" };
+    });
+    if (list.length) weekByDay.set(d, list);
+  }
+  const weekEvents = [...new Set([...weekByDay.values()].flat().map((e) => e.id))];
 
   const sumSent = waiting.reduce((s, q) => s + Number(q.total_ex_vat), 0);
   const sumAccepted = accepted.reduce((s, q) => s + Number(q.total_ex_vat), 0);
@@ -174,6 +181,7 @@ export default async function DashboardPage() {
             <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>
           </>
         )}
+        {canManageStaff(profile) && <Link className="btn" href="/personal?nytt=1#nytt-pass">Nytt arbetspass</Link>}
       </div>
 
       {/* Nyckeltal */}
@@ -301,60 +309,65 @@ export default async function DashboardPage() {
         </section>
       </div>
 
-      {/* Beläggning */}
-      <section className="card p-5 grid gap-3">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-lg font-semibold">Beläggning kommande två veckor</h2>
-          <span className="flex-1" />
-          <span className="flex items-center gap-3 text-xs text-muted">
-            <span className="flex items-center gap-1"><i className="inline-block size-3 rounded-sm bg-brand" /> Bekräftad</span>
-            <span className="flex items-center gap-1"><i className="inline-block size-3 rounded-sm bg-st-preliminar-soft border border-st-preliminar" /> Ej bekräftad</span>
-            <span className="flex items-center gap-1"><i className="inline-block size-3 rounded-sm border border-dashed border-muted" /> Del av salen</span>
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-separate border-spacing-1 text-xs">
-            <thead>
-              <tr>
-                <th />
-                {days.map((d) => (
-                  <th key={d} className={`font-normal text-center ${weekday(d) >= 5 ? "text-muted" : ""}`}>
-                    <span className="block label">{dayShort(d)}</span>
-                    <span className={d === today ? "font-semibold text-brand" : ""}>{Number(d.slice(8))}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {heatRooms.map((r) => (
-                <tr key={r.id}>
-                  <th scope="row" className="text-left font-semibold text-sm pr-2 whitespace-nowrap">{r.name.replace(", hela", "")}</th>
-                  {days.map((d) => {
-                    const c = cell(r.id, d);
-                    return (
-                      <td key={d} className="p-0">
-                        <Link
-                          href={`/vecka?vecka=${addDays(d, -weekday(d))}`}
-                          title={c ? c.titles.join(", ") : `${r.name} ledig`}
-                          className={`block h-7 rounded ${
-                            !c
-                              ? "bg-sunk/60 hover:bg-sunk"
-                              : c.confirmed
-                                ? `bg-brand ${c.full ? "" : "opacity-60"}`
-                                : "bg-st-preliminar-soft border border-st-preliminar"
-                          } ${c && !c.full ? "border-dashed" : ""}`}
-                        >
-                          <span className="sr-only">{c ? c.titles.join(", ") : "Ledig"}</span>
-                        </Link>
-                      </td>
-                    );
-                  })}
-                </tr>
+      {/* Kommande veckan och senaste notiser */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start">
+        <section className="card p-5 grid gap-3">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h2 className="text-lg font-semibold">Kommande veckan</h2>
+            <span className="text-sm text-muted">{weekEvents.length} evenemang</span>
+            <span className="flex-1" />
+            <Link className="text-xs text-muted hover:underline" href="/vecka">Veckovyn</Link>
+          </div>
+          {weekEvents.length === 0 ? (
+            <p className="text-sm text-muted">Inga evenemang de kommande sju dagarna.</p>
+          ) : (
+            <div className="grid gap-3">
+              {weekDays.filter((d) => weekByDay.has(d)).map((d) => (
+                <div key={d} className="grid gap-1">
+                  <h3 className="font-display font-semibold text-sm border-b border-line pb-1">
+                    {d === today ? "Idag" : d === tomorrow ? "I morgon" : `${dayShort(d)} ${fmtDayMonth(d)}`}
+                  </h3>
+                  <ul className="grid gap-1">
+                    {weekByDay.get(d)!.map((e) => (
+                      <li key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded-md border-l-4 px-2 py-1 hover:bg-sunk/60" style={{ borderLeftColor: e.color }}>
+                        <span className="font-mono text-xs w-24 shrink-0">{e.from}–{e.to}</span>
+                        <Link className="font-semibold hover:underline min-w-0" href={`/evenemang/${e.id}`}>{e.title}</Link>
+                        <span className="text-xs text-muted truncate">{e.rooms.join(", ")}</span>
+                        <span className="flex-1" />
+                        <StatusPill status={e.status} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </div>
+          )}
+        </section>
+
+        <section className="card p-5 grid gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-lg font-semibold">Senaste notiser</h2>
+            <span className="flex-1" />
+            <Link className="text-xs text-muted hover:underline" href="/notiser">Alla notiser</Link>
+          </div>
+          {latestNotes.length === 0 ? (
+            <p className="text-sm text-muted">Inga notiser ännu. Här syns när kunder svarar på offerter och personal tackar ja eller nej.</p>
+          ) : (
+            <ul className="grid gap-2 text-sm">
+              {latestNotes.map((n) => (
+                <li key={n.id} className="flex items-start gap-2">
+                  <span className={`mt-1.5 size-2 shrink-0 rounded-full ${n.read_at ? "bg-line" : "bg-brand"}`} aria-hidden />
+                  <span className="grid flex-1">
+                    {n.link ? <Link className={`hover:underline ${n.read_at ? "" : "font-semibold"}`} href={n.link}>{n.title}</Link> : <span>{n.title}</span>}
+                    {n.body && <span className="text-xs text-muted">{n.body}</span>}
+                  </span>
+                  <span className="text-xs text-muted whitespace-nowrap">{fmtDate(n.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       {/* Offerter och senast ändrat */}
       <div className="grid gap-5 lg:grid-cols-2 items-start">

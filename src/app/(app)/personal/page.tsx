@@ -19,7 +19,7 @@ type Row = Shift & {
 export default async function ShiftsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ fran?: string; dagar?: string; funktion?: string; bara?: string; fel?: string; passskapat?: string }>;
+  searchParams: Promise<{ fran?: string; dagar?: string; funktion?: string; bara?: string; fel?: string; passskapat?: string; nytt?: string }>;
 }) {
   const sp = await searchParams;
   const profile = await requireProfile();
@@ -63,7 +63,7 @@ export default async function ShiftsPage({
       {sp.passskapat && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">{sp.passskapat === "1" ? "Passet är skapat." : `${sp.passskapat} pass är skapade.`}</p>}
 
       {manager && (
-        <details className="card p-5" open={!shifts.length}>
+        <details id="nytt-pass" className="card p-5 scroll-mt-28" open={!shifts.length || sp.nytt === "1"}>
           <summary className="cursor-pointer font-semibold">+ Nytt pass</summary>
           <form action={createShift} className="grid gap-4 mt-4">
             <input type="hidden" name="back" value="/personal" />

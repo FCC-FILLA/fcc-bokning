@@ -1,5 +1,7 @@
 import { loadOptionPlaces, optionOrdinal } from "@/lib/bokning";
 import Link from "next/link";
+import { NO_TYPE, hiddenTypes, loadEventTypes } from "@/lib/typer";
+import { TypeFilter } from "@/components/type-filter";
 import { canBook, getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -16,13 +18,13 @@ type Row = {
   starts_at: string;
   ends_at: string;
   event_id: string;
-  events: { title: string; status: EventStatus };
+  events: { title: string; status: EventStatus; event_type_id: string | null };
 };
 
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ vecka?: string; avbokade?: string; personal?: string }>;
+  searchParams: Promise<{ vecka?: string; avbokade?: string; personal?: string; dolj?: string }>;
 }) {
   const sp = await searchParams;
   const today = todayDate();
@@ -35,11 +37,12 @@ export default async function SchedulePage({
   const profile = await getProfile();
   const booker = canBook(profile);
 
-  const [{ data: roomData }, { data: bookingData }, { data: shiftData }] = await Promise.all([
+  const hidden = hiddenTypes(sp.dolj);
+  const [{ data: roomData }, { data: bookingData }, { data: shiftData }, types] = await Promise.all([
     supabase.from("rooms").select("*").eq("active", true).eq("bookable", true).order("sort_order"),
     supabase
       .from("bookings")
-      .select("id, room_id, starts_at, ends_at, event_id, events!inner(title, status)")
+      .select("id, room_id, starts_at, ends_at, event_id, events!inner(title, status, event_type_id)")
       .lt("starts_at", dayStartIso(addDays(monday, 7)))
       .gt("ends_at", dayStartIso(monday))
       .order("starts_at"),
@@ -52,7 +55,9 @@ export default async function SchedulePage({
           .neq("status", "utkast")
           .order("starts_at")
       : Promise.resolve({ data: [] }),
+    loadEventTypes(supabase),
   ]);
+  const typeColor = new Map(types.map((t) => [t.id, t.color]));
 
   const rooms = (roomData ?? []) as Room[];
   type ShiftRow = {
@@ -67,7 +72,7 @@ export default async function SchedulePage({
     .sort((a, b) => a[1].sort_order - b[1].sort_order);
   const all = (bookingData ?? []) as unknown as Row[];
   const active = all.filter((b) => ["forfragan", "preliminar", "bekraftad"].includes(b.events.status));
-  const visible = all.filter((b) => showCancelled || b.events.status !== "avbokad");
+  const visible = all.filter((b) => (showCancelled || b.events.status !== "avbokad") && !hidden.has(b.events.event_type_id ?? NO_TYPE));
   const overlap = makeOverlap(rooms);
   const roomName = new Map(rooms.map((r) => [r.id, r.name]));
 
@@ -88,8 +93,10 @@ export default async function SchedulePage({
     return `${s}–${e}`;
   };
 
-  const q = (vecka: string, o: { avbokade?: boolean; personal?: boolean } = {}) =>
-    `/vecka?vecka=${vecka}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}`;
+  const q = (vecka: string, o: { avbokade?: boolean; personal?: boolean; dolj?: string } = {}) => {
+    const dolj = o.dolj ?? sp.dolj ?? "";
+    return `/vecka?vecka=${vecka}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}${dolj ? `&dolj=${dolj}` : ""}`;
+  };
 
   return (
     <>
@@ -108,7 +115,7 @@ export default async function SchedulePage({
         <Link className={`btn ${showStaff ? "btn-primary" : ""}`} href={q(monday, { personal: !showStaff })} aria-pressed={showStaff}>
           {showStaff ? "Dölj personal" : "Visa personal"}
         </Link>
-        <Link className="btn" href={`/manad?m=${monday.slice(0, 7)}`}>Månadsvy</Link>
+        <Link className="btn" href={`/manad?m=${monday.slice(0, 7)}${showStaff ? "&personal=1" : ""}${sp.dolj ? `&dolj=${sp.dolj}` : ""}`}>Månadsvy</Link>
         {booker && <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>}
       </div>
 
@@ -121,7 +128,9 @@ export default async function SchedulePage({
         ))}
         <span>Randig ruta: lokalen blockeras av en bokning i hela salen eller en del av den.</span>
         <span className="text-warn">Röd ram: krock.</span>
+        <span>Färgad kant: evenemangstyp.</span>
       </div>
+      <TypeFilter types={types} hidden={hidden} href={(dolj) => q(monday, { dolj })} />
 
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[1080px] table-fixed border-separate border-spacing-0 text-sm">
@@ -186,6 +195,7 @@ export default async function SchedulePage({
                               className={`pointer-events-auto block rounded-md border-l-[3px] px-1.5 py-0.5 text-xs font-semibold leading-tight st-${b.events.status} ${
                                 b.events.status === "preliminar" ? "border-dashed" : ""
                               } ${clashing.has(b.id) ? "ring-[1.5px] ring-warn ring-inset" : ""}`}
+                              style={b.events.event_type_id && typeColor.has(b.events.event_type_id) ? { borderLeftColor: typeColor.get(b.events.event_type_id) } : undefined}
                             >
                               <span className="block font-mono font-normal opacity-80">{timeLabel(b, d)}</span>
                               <span className="block truncate">
@@ -239,10 +249,13 @@ export default async function SchedulePage({
                                 key={x.id}
                                 href={`/personal/pass/${x.id}`}
                                 title={`${fn.name}${x.events ? ` · ${x.events.title}` : ""} · ${filled} av ${x.needed}`}
-                                className={`flex items-center justify-between gap-1 rounded px-1.5 py-0.5 text-[11px] leading-tight ${full ? "bg-sunk" : "bg-st-preliminar-soft text-st-preliminar"}`}
+                                className={`grid rounded px-1.5 py-0.5 text-[11px] leading-tight ${full ? "bg-sunk" : "bg-st-preliminar-soft text-st-preliminar"}`}
                               >
-                                <span className="font-mono">{fmtTime(x.starts_at)}–{fmtTime(x.ends_at)}</span>
-                                <span className="font-semibold tabular-nums">{filled}/{x.needed}</span>
+                                <span className="flex items-center justify-between gap-1">
+                                  <span className="font-mono">{fmtTime(x.starts_at)}–{fmtTime(x.ends_at)}</span>
+                                  <span className="font-semibold tabular-nums">{filled}/{x.needed}</span>
+                                </span>
+                                {x.events && <span className="truncate">{x.events.title}</span>}
                               </Link>
                             );
                           })}

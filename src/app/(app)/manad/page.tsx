@@ -1,5 +1,7 @@
 import { loadOptionPlaces, optionOrdinal } from "@/lib/bokning";
 import Link from "next/link";
+import { NO_TYPE, hiddenTypes, loadEventTypes } from "@/lib/typer";
+import { TypeFilter } from "@/components/type-filter";
 import { canBook, getProfile } from "@/lib/auth";
 import { addDays, dayStartIso, fmtTime, isoToDate, isoWeek, mondayOf, todayDate } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
@@ -15,10 +17,10 @@ type Row = {
   ends_at: string;
   event_id: string;
   room_id: string;
-  events: { title: string; status: EventStatus };
+  events: { title: string; status: EventStatus; event_type_id: string | null };
 };
 
-type DayEvent = { id: string; title: string; status: EventStatus; start: string; rooms: number };
+type DayEvent = { id: string; title: string; status: EventStatus; start: string; rooms: number; type: string | null };
 
 function shiftMonth(ym: string, n: number) {
   const [y, m] = ym.split("-").map(Number);
@@ -26,7 +28,7 @@ function shiftMonth(ym: string, n: number) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-export default async function MonthPage({ searchParams }: { searchParams: Promise<{ m?: string; avbokade?: string; personal?: string }> }) {
+export default async function MonthPage({ searchParams }: { searchParams: Promise<{ m?: string; avbokade?: string; personal?: string; dolj?: string }> }) {
   const sp = await searchParams;
   const today = todayDate();
   const ym = /^\d{4}-\d{2}$/.test(sp.m ?? "") ? sp.m! : today.slice(0, 7);
@@ -43,11 +45,14 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
   const profile = await getProfile();
   const { data } = await supabase
     .from("bookings")
-    .select("starts_at, ends_at, event_id, room_id, events!inner(title, status)")
+    .select("starts_at, ends_at, event_id, room_id, events!inner(title, status, event_type_id)")
     .lt("starts_at", dayStartIso(gridEnd))
     .gt("ends_at", dayStartIso(gridStart))
     .order("starts_at");
-  const rows = ((data ?? []) as unknown as Row[]).filter((r) => showCancelled || r.events.status !== "avbokad");
+  const hidden = hiddenTypes(sp.dolj);
+  const types = await loadEventTypes(supabase);
+  const typeColor = new Map(types.map((t) => [t.id, t.color]));
+  const rows = ((data ?? []) as unknown as Row[]).filter((r) => (showCancelled || r.events.status !== "avbokad") && !hidden.has(r.events.event_type_id ?? NO_TYPE));
   const optionPlace = await loadOptionPlaces(supabase, rows.filter((r) => r.events.status === "forfragan" || r.events.status === "preliminar").map((r) => r.event_id));
 
   // Personal per dag: tillsatta av behövda platser.
@@ -78,7 +83,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
       const m = perDay.get(d) ?? new Map<string, DayEvent>();
       const ev = m.get(r.event_id);
       const start = d === isoToDate(r.starts_at) ? fmtTime(r.starts_at) : "←";
-      if (!ev) m.set(r.event_id, { id: r.event_id, title: r.events.title, status: r.events.status, start, rooms: 1 });
+      if (!ev) m.set(r.event_id, { id: r.event_id, title: r.events.title, status: r.events.status, start, rooms: 1, type: r.events.event_type_id });
       else {
         ev.rooms++;
         if (start < ev.start) ev.start = start;
@@ -88,8 +93,10 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
   }
 
   const [y, mo] = ym.split("-").map(Number);
-  const q = (m: string, o: { avbokade?: boolean; personal?: boolean } = {}) =>
-    `/manad?m=${m}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}`;
+  const q = (m: string, o: { avbokade?: boolean; personal?: boolean; dolj?: string } = {}) => {
+    const dolj = o.dolj ?? sp.dolj ?? "";
+    return `/manad?m=${m}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}${dolj ? `&dolj=${dolj}` : ""}`;
+  };
   const MAX = 4;
 
   return (
@@ -106,9 +113,11 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
         <Link className={`btn ${showStaff ? "btn-primary" : ""}`} href={q(ym, { personal: !showStaff })} aria-pressed={showStaff}>
           {showStaff ? "Dölj personal" : "Visa personal"}
         </Link>
-        <Link className="btn" href={`/vecka?vecka=${mondayOf(ym === today.slice(0, 7) ? today : first)}${showStaff ? "&personal=1" : ""}`}>Veckovy</Link>
+        <Link className="btn" href={`/vecka?vecka=${mondayOf(ym === today.slice(0, 7) ? today : first)}${showStaff ? "&personal=1" : ""}${sp.dolj ? `&dolj=${sp.dolj}` : ""}`}>Veckovy</Link>
         {canBook(profile) && <Link className="btn btn-primary" href="/evenemang/ny">Nytt evenemang</Link>}
       </div>
+
+      <TypeFilter types={types} hidden={hidden} href={(dolj) => q(ym, { dolj })} />
 
       <div className="card overflow-x-auto">
         <div className="grid min-w-[900px] grid-cols-[44px_repeat(7,minmax(0,1fr))]">
@@ -151,6 +160,7 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
                       className={`block truncate rounded border-l-[3px] px-1.5 py-0.5 text-xs font-semibold st-${e.status} ${
                         e.status === "preliminar" ? "border-dashed" : ""
                       }`}
+                      style={e.type && typeColor.has(e.type) ? { borderLeftColor: typeColor.get(e.type) } : undefined}
                     >
                       <span className="font-mono font-normal opacity-80">{e.start}</span>{" "}
                       {optionPlace.has(e.id) && <span className="rounded bg-white/70 px-1 font-mono text-[10px]">{optionOrdinal(optionPlace.get(e.id)!)}</span>} {e.title}
