@@ -25,8 +25,8 @@ describe("offert-pdf", () => {
       rooms: [{ name: "Stora salen, hela", image: "/lokaler/stora-salen.jpg", text: "Kyrksal med läktare.", kvm: 1200, max: 3000 }],
       bookings: [{ room: "Stora salen, hela", starts_at: "2027-03-05T06:00:00Z", ends_at: "2027-03-05T22:00:00Z" }],
       lines: [
-        { group: "Lokal", group_order: 1, description: "Stora salen", line_date: "2027-03-05", quantity: 1, unit: "dag", unit_price: 90000, discount_pct: 20, vat_rate: 25, kind: "ingar" },
-        { group: "Mat & dryck", group_order: 4, description: "Hyra kök", line_date: null, quantity: 1, unit: "st", unit_price: 3000, discount_pct: 0, vat_rate: 25, kind: "tillval" },
+        { group: "Lokal", group_order: 1, description: "Stora salen", line_date: "2027-03-05", quantity: 1, unit: "dag", unit_price: 90000, discount_pct: 20, vat_rate: 25, kind: "ingar", image: "/lokaler/stora-salen.jpg", gallery: [], icon: "room", text: "Stockholms största sal." },
+        { group: "Mat & dryck", group_order: 4, description: "Hyra kök", line_date: null, quantity: 1, unit: "st", unit_price: 3000, discount_pct: 0, vat_rate: 25, kind: "tillval", image: null, gallery: [], icon: "meal", text: null },
       ],
     };
     const buf = await renderQuotePdf(doc, new Map([["/lokaler/stora-salen.jpg", readFileSync("public/lokaler/stora-salen.jpg")]]));

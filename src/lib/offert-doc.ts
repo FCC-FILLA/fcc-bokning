@@ -35,6 +35,12 @@ export type QuoteDoc = {
     discount_pct: number;
     vat_rate: number;
     kind: LineKind;
+    /** Foto (lokalens eller artikelns egen), annars null och då visas ikonen. */
+    image: string | null;
+    gallery: string[];
+    icon: string;
+    /** Artikelns text till kunden. */
+    text: string | null;
   }[];
 };
 
@@ -47,6 +53,10 @@ export function normalizeDoc(raw: QuoteDoc): QuoteDoc {
       unit_price: Number(l.unit_price),
       discount_pct: Number(l.discount_pct),
       vat_rate: Number(l.vat_rate),
+      image: l.image ?? null,
+      gallery: l.gallery ?? [],
+      icon: l.icon ?? "box",
+      text: l.text ?? null,
     })),
     bookings: raw.bookings ?? [],
     participants: raw.participants ?? null,
@@ -71,7 +81,7 @@ export async function loadInternalDoc(supabase: SupabaseClient, id: string): Pro
     .maybeSingle();
   if (!q) return null;
   const [{ data: lines }, { data: groups }, { data: bookings }, { data: allRooms }, { data: caps }] = await Promise.all([
-    supabase.from("quote_lines").select("*").eq("quote_id", id).order("sort_order"),
+    supabase.from("quote_lines").select("*, articles(icon, image_path, description, room_id)").eq("quote_id", id).order("sort_order"),
     supabase.from("article_groups").select("*"),
     q.event_id
       ? supabase.from("bookings").select("starts_at, ends_at, room_id").eq("event_id", q.event_id).order("starts_at")
@@ -79,6 +89,18 @@ export async function loadInternalDoc(supabase: SupabaseClient, id: string): Pro
     supabase.from("rooms").select("id, name, parent_id, image_path, sales_text, kvm, sort_order"),
     supabase.from("room_capacities").select("room_id, capacity"),
   ]);
+  type Art = { icon: string | null; image_path: string | null; description: string | null; room_id: string | null };
+  // Samma regler som line_media() i databasen.
+  const media = (a: Art | null, groupIcon: string | undefined) => {
+    const r = a?.room_id ? roomById.get(a.room_id) : undefined;
+    const parent = r?.parent_id ? roomById.get(r.parent_id) : undefined;
+    return {
+      image: a?.image_path ?? r?.image_path ?? parent?.image_path ?? null,
+      icon: a?.icon ?? groupIcon ?? "box",
+      text: a?.description ?? r?.sales_text ?? null,
+      gallery: r ? [...new Set([...roomById.values()].filter((x) => x.image_path && (x.id === r.id || x.parent_id === r.id)).map((x) => x.image_path!))] : [],
+    };
+  };
   type R = { id: string; name: string; parent_id: string | null; image_path: string | null; sales_text: string | null; kvm: number | null; sort_order: number };
   const roomById = new Map(((allRooms ?? []) as R[]).map((r) => [r.id, r]));
   const maxCap = new Map<string, number>();
@@ -89,9 +111,9 @@ export async function loadInternalDoc(supabase: SupabaseClient, id: string): Pro
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((r) => {
       const parent = r.parent_id ? roomById.get(r.parent_id) : undefined;
-      return { name: r.name, image: r.image_path ?? parent?.image_path ?? null, text: r.sales_text ?? parent?.sales_text ?? null, kvm: r.kvm, max: maxCap.get(r.id) ?? null };
+      return { name: r.name, image: r.image_path ?? parent?.image_path ?? null, text: r.sales_text, kvm: r.kvm, max: maxCap.get(r.id) ?? null };
     });
-  const g = new Map(((groups ?? []) as { id: string; name: string; sort_order: number }[]).map((x) => [x.id, x]));
+  const g = new Map(((groups ?? []) as { id: string; name: string; sort_order: number; icon: string }[]).map((x) => [x.id, x]));
   const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
   return normalizeDoc({
     number: q.number,
@@ -128,6 +150,7 @@ export async function loadInternalDoc(supabase: SupabaseClient, id: string): Pro
         discount_pct: l.discount_pct as number,
         vat_rate: l.vat_rate as number,
         kind: l.kind as LineKind,
+        ...media(one(l.articles as Art | Art[] | null), g.get(l.group_id as string)?.icon),
       }))
       .sort((a, b) => a.group_order - b.group_order),
   });

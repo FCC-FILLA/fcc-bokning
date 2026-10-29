@@ -17,6 +17,10 @@ const SUPABASE_STUBS = `
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema auth to authenticated;
   grant execute on function auth.uid() to authenticated;
+  create schema storage;
+  create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
+  create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
+  alter table storage.objects enable row level security;
 `;
 
 let db: PGlite;
@@ -150,7 +154,7 @@ describe("offerter", () => {
       "select count(*)::int as n, count(room_id)::int as linked from articles",
     );
     expect(r.rows[0].n).toBe(200);
-    expect(r.rows[0].linked).toBe(12);
+    expect(r.rows[0].linked).toBe(13);
   });
 
   it("räknar samma summor i databasen som i appen", async () => {
@@ -277,5 +281,38 @@ describe("kundens offert med lokalbilder", () => {
     expect(r.rows[0].q.bookings).toHaveLength(2);
     expect(r.rows[0].q.rooms).toHaveLength(1);
     expect(r.rows[0].q.rooms[0]).toMatchObject({ name: "Rörstrand 1", image: "/lokaler/rorstrand-1.jpg", max: 150 });
+  });
+});
+
+describe("artikelbilder och ikoner", () => {
+  it("ger varje offertrad bild, galleri, ikon och text", async () => {
+    const q = await db.query<{ id: string; share_token: string }>("insert into quotes (title, status) values ('Kort', 'skickad') returning id, share_token");
+    const id = q.rows[0].id;
+    const art = (name: string) => `(select id from articles where name = '${name}')`;
+    await db.exec(`
+      insert into quote_lines (quote_id, group_id, article_id, description, sort_order) values
+        ('${id}', 'lokal', ${art("Rörstrand 1-7")}, 'Rörstrandssalarna', 1),
+        ('${id}', 'mat', ${art("Konferenspaket heldag")}, 'Konferenspaket heldag', 2),
+        ('${id}', 'ovrigt', ${art("Möblering: 101-200 gäster schablon")}, 'Möblering', 3),
+        ('${id}', 'teknik', null, 'Fritext utan artikel', 4);
+    `);
+    const r = await db.query<{ q: { lines: { image: string | null; gallery: string[]; icon: string; text: string | null }[] } }>(
+      "select public_quote($1) as q",
+      [q.rows[0].share_token],
+    );
+    const [lokal, fri, mat, mobel] = r.rows[0].q.lines;
+    expect(lokal.image).toBe("/lokaler/rorstrandssalarna.jpg");
+    expect(lokal.gallery.length).toBeGreaterThanOrEqual(8);
+    expect(lokal.text).toMatch(/Sju flexibla salar/);
+    expect(mat).toMatchObject({ icon: "meal", image: null, text: "Förmiddagsfika, lunch och eftermiddagsfika." });
+    expect(mobel.icon).toBe("chair");
+    expect(fri).toMatchObject({ icon: "tech", image: null, text: null, gallery: [] });
+  });
+
+  it("alla aktiva artiklar har en ikon via sig själva eller sin grupp", async () => {
+    const r = await db.query<{ n: number }>(
+      "select count(*)::int n from articles a join article_groups g on g.id = a.group_id where coalesce(a.icon, g.icon) is null",
+    );
+    expect(r.rows[0].n).toBe(0);
   });
 });

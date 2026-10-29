@@ -5,6 +5,8 @@ import { dayLong, fmtDate, fmtDayMonth, fmtTime, isoToDate } from "@/lib/datum";
 import { fmtKr, lineTotal, quoteTotals } from "@/lib/offert";
 import { groupLines, loadPublicDoc, type QuoteDoc } from "@/lib/offert-doc";
 import { createClient } from "@/lib/supabase/server";
+import { ArticleIcon } from "@/components/icon";
+import { LineCard } from "@/components/line-card";
 
 export const metadata: Metadata = { title: "Offert", robots: { index: false, follow: false } };
 
@@ -169,38 +171,31 @@ export default async function PublicQuotePage({
 
           <section className="grid gap-4">
             <SectionTitle kicker="Pris">Vad som ingår</SectionTitle>
-            <div className="card p-5 sm:p-6 grid gap-6">
+            <div className="grid gap-6">
               {[...included].map(([group, lines]) => (
-                <div key={group} className="grid gap-1">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-brand">{group}</h3>
-                  <ul>
-                    {lines.map((l, i) => (
-                      <li key={i} className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 border-b border-line py-2.5 last:border-0">
-                        <span className="flex-1 min-w-48">
-                          {l.description}
-                          {l.line_date && <span className="ml-2 text-xs text-muted">{fmtDate(l.line_date)}</span>}
-                        </span>
-                        <span className="text-sm text-muted tabular-nums">
-                          {l.quantity.toLocaleString("sv-SE")} {l.unit} × {fmtKr(l.unit_price)}
-                          {l.discount_pct ? <span className="ml-2 rounded-full bg-brand-soft text-brand px-2 py-0.5 text-xs">−{l.discount_pct} %</span> : null}
-                        </span>
-                        <span className="w-28 text-right font-semibold tabular-nums">{fmtKr(lineTotal(l))}</span>
-                      </li>
-                    ))}
+                <div key={group} className="grid gap-3">
+                  <h3 className="flex items-center gap-2.5 rounded-xl bg-brand px-4 py-3 text-white">
+                    <ArticleIcon name="box" className="size-5 opacity-90" strokeWidth={2.6} />
+                    <span className="font-display font-semibold uppercase tracking-[0.08em] text-sm">{group}</span>
+                    <span className="ml-auto font-semibold tabular-nums">{fmtKr(lines.reduce((s, l) => s + lineTotal(l), 0))}</span>
+                  </h3>
+                  <ul className="grid gap-3 sm:grid-cols-2 sm:px-2">
+                    {lines.map((l, i) => <LineCard key={i} line={l} />)}
                   </ul>
                 </div>
               ))}
-              <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-sm tabular-nums border-t-2 border-brand pt-4 sm:ml-auto sm:min-w-80">
+
+              <dl className="card grid grid-cols-[1fr_auto] gap-x-6 gap-y-1 p-5 text-sm tabular-nums sm:ml-auto sm:min-w-96">
                 {t.discount > 0 && (
                   <>
                     <dt className="text-muted">Summa före rabatt</dt><dd className="text-right">{fmtKr(t.beforeDiscount)}</dd>
-                    <dt className="text-muted">Rabatt</dt><dd className="text-right">−{fmtKr(t.discount)}</dd>
+                    <dt className="text-muted">Rabatt</dt><dd className="text-right text-ok">−{fmtKr(t.discount)}</dd>
                   </>
                 )}
                 <dt className="text-muted">Summa exkl. moms</dt><dd className="text-right">{fmtKr(t.exVat)}</dd>
                 <dt className="text-muted">Moms</dt><dd className="text-right">{fmtKr(t.vat)}</dd>
-                <dt className="font-semibold pt-1">Att betala inkl. moms</dt>
-                <dd className="text-right font-display text-2xl font-semibold text-brand">{fmtKr(t.inclVat)}</dd>
+                <dt className="font-semibold pt-2 mt-1 border-t border-line">Att betala inkl. moms</dt>
+                <dd className="text-right font-display text-2xl font-semibold text-brand pt-2 mt-1 border-t border-line">{fmtKr(t.inclVat)}</dd>
               </dl>
             </div>
           </section>
@@ -210,19 +205,10 @@ export default async function PublicQuotePage({
               <SectionTitle kicker="Tillval">Gör det ännu bättre</SectionTitle>
               <p className="text-sm text-muted -mt-2">Ingår inte i summan ovan. Säg till om ni vill lägga till något.</p>
               <ul className="grid gap-3 sm:grid-cols-2">
-                {addons.map((l, i) => (
-                  <li key={i} className="card p-4 grid gap-1">
-                    <span className="font-medium">{l.description}</span>
-                    <span className="flex justify-between text-sm text-muted tabular-nums">
-                      <span>{l.quantity.toLocaleString("sv-SE")} {l.unit} × {fmtKr(l.unit_price)}</span>
-                      <span className="font-semibold text-fg">{fmtKr(lineTotal(l))}</span>
-                    </span>
-                  </li>
-                ))}
+                {addons.map((l, i) => <LineCard key={i} line={l} />)}
               </ul>
             </section>
           )}
-
           {doc.terms && (
             <details className="card p-5 group">
               <summary className="cursor-pointer font-semibold list-none flex justify-between">

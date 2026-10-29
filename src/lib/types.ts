@@ -127,6 +127,8 @@ export type Article = {
   vat_rate: number;
   room_id: string | null;
   description: string | null;
+  icon: string | null;
+  image_path: string | null;
   active: boolean;
   sort_order: number;
 };

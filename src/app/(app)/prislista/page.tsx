@@ -1,4 +1,6 @@
+import Image from "next/image";
 import Link from "next/link";
+import { ArticleIcon } from "@/components/icon";
 import { isAdmin, requireProfile } from "@/lib/auth";
 import { fmtKr } from "@/lib/offert";
 import { createClient } from "@/lib/supabase/server";
@@ -22,7 +24,7 @@ export default async function PriceListPage({
   const [{ data: g }, { data: a }, { data: r }, { data: s }] = await Promise.all([
     supabase.from("article_groups").select("*").order("sort_order"),
     supabase.from("articles").select("*").order("sort_order"),
-    supabase.from("rooms").select("id, name, sort_order").eq("active", true).order("sort_order"),
+    supabase.from("rooms").select("id, name, sort_order, parent_id, image_path").eq("active", true).order("sort_order"),
     supabase.from("app_settings").select("*"),
   ]);
   const groups = (g ?? []) as ArticleGroup[];
@@ -42,6 +44,21 @@ export default async function PriceListPage({
   const missingCount = all.filter((x) => x.price == null && x.active).length;
   const keep = new URLSearchParams({ ...(group && { grupp: group }), ...(q && { q }), ...(missing && { saknar: "1" }) }).toString();
   const groupName = new Map(groups.map((x) => [x.id, x.name]));
+  const groupIcon = new Map((groups as (ArticleGroup & { icon?: string })[]).map((x) => [x.id, x.icon ?? "box"]));
+  const roomImg = new Map(((r ?? []) as { id: string; parent_id: string | null; image_path: string | null }[]).map((x) => [x.id, x]));
+  const thumbOf = (x: Article) => {
+    const room = x.room_id ? roomImg.get(x.room_id) : undefined;
+    return x.image_path ?? room?.image_path ?? (room?.parent_id ? roomImg.get(room.parent_id)?.image_path : null) ?? null;
+  };
+  const Thumb = ({ x }: { x: Article }) => {
+    const img = thumbOf(x);
+    return (
+      <Link href={`/prislista/${x.id}`} className="relative grid size-11 place-items-center overflow-hidden rounded-md bg-sunk text-fg hover:ring-2 hover:ring-brand" title="Bild, ikon och kundtext">
+        {img ? <Image src={img} alt="" fill sizes="44px" className="object-cover" /> : <ArticleIcon name={x.icon ?? groupIcon.get(x.group_id)} className="size-7" />}
+        <span className="sr-only">Bild och text för {x.name}</span>
+      </Link>
+    );
+  };
 
   if (sp.vy === "villkor") {
     return (
@@ -102,10 +119,12 @@ export default async function PriceListPage({
         <button className="btn" type="submit">Visa</button>
       </form>
 
+      <p className="text-sm text-muted -mb-2">Klicka på bilden för att välja bild, ikon och text som kunden ser i offerten.</p>
       <div className="card overflow-x-auto">
-        <table className="table min-w-[1080px]">
+        <table className="table min-w-[1140px]">
           <thead>
             <tr>
+              <th className="w-14">Bild</th>
               <th className="w-20">Art.nr</th>
               <th>Artikel</th>
               <th className="w-36">Grupp</th>
@@ -121,8 +140,10 @@ export default async function PriceListPage({
             {list.map((x) =>
               admin ? (
                 <tr key={x.id} className={x.active ? "" : "opacity-60"}>
-                  <td colSpan={9} className="p-0">
-                    <form action={updateArticle.bind(null, x.id, keep)} className="grid grid-cols-[80px_minmax(0,1fr)_144px_96px_128px_112px_80px_80px_80px] items-center gap-2 px-3 py-1.5">
+                  <td colSpan={10} className="p-0">
+                    <div className="flex items-center gap-2 pl-3">
+                    <Thumb x={x} />
+                    <form action={updateArticle.bind(null, x.id, keep)} className="grid flex-1 grid-cols-[80px_minmax(0,1fr)_144px_96px_128px_112px_80px_80px_80px] items-center gap-2 pr-3 py-1.5">
                       <input className="input font-mono text-sm" name="article_no" defaultValue={x.article_no ?? ""} aria-label="Artikelnummer" />
                       <div className="grid gap-1 min-w-0">
                         <input className="input" name="name" defaultValue={x.name} aria-label="Namn" required />
@@ -145,10 +166,12 @@ export default async function PriceListPage({
                       <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" name="active" defaultChecked={x.active} /> Ja</label>
                       <button className="btn text-sm" type="submit">Spara</button>
                     </form>
+                    </div>
                   </td>
                 </tr>
               ) : (
                 <tr key={x.id} className={x.active ? "" : "opacity-60"}>
+                  <td><Thumb x={x} /></td>
                   <td className="font-mono text-sm">{x.article_no}</td>
                   <td>{x.name}</td>
                   <td>{groupName.get(x.group_id)}</td>
@@ -161,7 +184,7 @@ export default async function PriceListPage({
               ),
             )}
             {list.length === 0 && (
-              <tr><td colSpan={9} className="text-center text-muted py-8">Inga artiklar matchar.</td></tr>
+              <tr><td colSpan={10} className="text-center text-muted py-8">Inga artiklar matchar.</td></tr>
             )}
           </tbody>
         </table>

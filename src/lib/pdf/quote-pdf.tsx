@@ -1,5 +1,6 @@
 /* eslint-disable jsx-a11y/alt-text -- react-pdf:s Image har ingen alt-text */
-import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, Path, StyleSheet, Svg, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { iconPaths } from "@/lib/ikoner";
 import { fmtDate, fmtRange } from "@/lib/datum";
 import { fmtKr, lineTotal, quoteTotals } from "@/lib/offert";
 import { groupLines, type QuoteDoc } from "@/lib/offert-doc";
@@ -25,6 +26,9 @@ const s = StyleSheet.create({
   h2: { fontSize: 10.5, fontFamily: "Helvetica-Bold", color: BRAND, marginTop: 10, marginBottom: 4 },
   tr: { flexDirection: "row", borderBottomWidth: 0.5, borderBottomColor: LINE, paddingVertical: 3.5 },
   th: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BRAND, paddingBottom: 3, fontSize: 7.5, color: MUTED, textTransform: "uppercase" },
+  cThumb: { width: 34, paddingRight: 8 },
+  thumb: { width: 26, height: 26, objectFit: "cover", borderRadius: 2 },
+  lineText: { fontSize: 7.5, color: MUTED, marginTop: 1 },
   cDesc: { flexGrow: 1, flexBasis: 0, paddingRight: 6 },
   cDate: { width: 62 },
   cQty: { width: 50, textAlign: "right" },
@@ -56,6 +60,7 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
   const addons = doc.lines.filter((l) => l.kind === "tillval");
   const header = (
     <View style={s.th} fixed>
+      <Text style={s.cThumb} />
       <Text style={s.cDesc}>Beskrivning</Text>
       <Text style={s.cDate}>Datum</Text>
       <Text style={s.cQty}>Antal</Text>
@@ -65,8 +70,22 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
     </View>
   );
   const row = (l: QuoteDoc["lines"][number], i: number) => (
-    <View style={s.tr} key={i} wrap={false}>
-      <Text style={s.cDesc}>{l.description}</Text>
+    <View style={[s.tr, { alignItems: "center" }]} key={i} wrap={false}>
+      <View style={s.cThumb}>
+        {l.image && images.has(l.image) ? (
+          <Image style={s.thumb} src={images.get(l.image)!} />
+        ) : (
+          <Svg viewBox="0 0 48 48" width={22} height={22}>
+            {iconPaths(l.icon).map((d, k) => (
+              <Path key={k} d={d} fill="none" stroke={BRAND} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" />
+            ))}
+          </Svg>
+        )}
+      </View>
+      <View style={s.cDesc}>
+        <Text>{l.description}</Text>
+        {l.text && <Text style={s.lineText}>{l.text}</Text>}
+      </View>
       <Text style={s.cDate}>{shortDate(l.line_date)}</Text>
       <Text style={s.cQty}>{`${l.quantity.toLocaleString("sv-SE")} ${l.unit}`}</Text>
       <Text style={s.cPrice}>{fmtKr(l.unit_price)}</Text>
@@ -141,7 +160,7 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
 
         {[...included].map(([group, lines]) => (
           <View key={group} wrap>
-            <Text style={s.h2}>{group}</Text>
+            <Text style={s.h2} minPresenceAhead={60}>{group}</Text>
             {header}
             {lines.map(row)}
           </View>
@@ -164,7 +183,7 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
 
         {addons.length > 0 && (
           <View wrap>
-            <Text style={s.h2}>Möjliga tillval (ingår inte ovan)</Text>
+            <Text style={s.h2} minPresenceAhead={60}>Möjliga tillval (ingår inte ovan)</Text>
             {header}
             {addons.map(row)}
             <View style={s.sumRow}><Text style={s.sumLabel}>Tillval exkl. moms</Text><Text style={s.sumVal}>{fmtKr(t.addonsExVat)}</Text></View>
@@ -194,9 +213,12 @@ export async function renderQuotePdf(doc: QuoteDoc, images: PdfImages = new Map(
   return renderToBuffer(<QuotePdf doc={doc} images={images} />);
 }
 
-/** Hämtar lokalbilderna (från /lokaler/…) via sajtens egen adress. Misslyckas en bild hoppar vi bara över den. */
+const okImage = (p: string | null): p is string =>
+  !!p && (p.startsWith("/lokaler/") || /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\//.test(p));
+
+/** Hämtar lokal- och artikelbilder. Lokala sökvägar via sajtens egen adress. Misslyckas en bild hoppar vi bara över den. */
 export async function fetchPdfImages(doc: QuoteDoc, origin: string): Promise<PdfImages> {
-  const paths = [...new Set(doc.rooms.map((r) => r.image).filter((p): p is string => !!p && p.startsWith("/lokaler/")))].slice(0, 8);
+  const paths = [...new Set([...doc.rooms.map((r) => r.image), ...doc.lines.map((l) => l.image)].filter(okImage))].slice(0, 24);
   const out: PdfImages = new Map();
   await Promise.all(
     paths.map(async (p) => {
