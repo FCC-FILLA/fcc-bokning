@@ -44,6 +44,7 @@ export function QuoteEditor({
   readOnly,
   submitLabel = "Spara rader",
   hideDates = false,
+  commissionPct = null,
 }: {
   groups: EditorGroup[];
   articles: EditorArticle[];
@@ -51,6 +52,7 @@ export function QuoteEditor({
   readOnly: boolean;
   submitLabel?: string;
   hideDates?: boolean;
+  commissionPct?: number | null;
 }) {
   const [lines, setLines] = useState<EditorLine[]>(() => initial.map((l) => ({ ...l, key: newKey() })));
   const [dirty, setDirty] = useState(false);
@@ -272,6 +274,15 @@ export function QuoteEditor({
             <span className={totals.margin < 0 ? "text-warn font-semibold" : "font-semibold text-fg"}>{fmtKr(totals.margin)}</span>
             {totals.exVat > 0 && ` (${Math.round((totals.margin / totals.exVat) * 100)} %)`}. Syns inte för kunden.
           </p>
+          {commissionPct ? (
+            <p>
+              Provision {commissionPct.toLocaleString("sv-SE")} %: {fmtKr((totals.exVat * commissionPct) / 100)}. Marginal efter provision{" "}
+              <span className={totals.margin - (totals.exVat * commissionPct) / 100 < 0 ? "text-warn font-semibold" : "font-semibold text-fg"}>
+                {fmtKr(totals.margin - (totals.exVat * commissionPct) / 100)}
+              </span>
+              .
+            </p>
+          ) : null}
         </div>
         <dl className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1 text-sm tabular-nums justify-end">
           {totals.discount > 0 && (

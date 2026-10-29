@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { isAdmin, requireProfile } from "@/lib/auth";
 import { FCC_PHOTOS } from "@/lib/bilder";
+import { SECTIONS, lookFrom } from "@/lib/offert-doc";
 import { createClient } from "@/lib/supabase/server";
 import { ImageInput } from "@/components/image-input";
 import { saveQuoteSettings } from "../actions";
@@ -18,6 +19,8 @@ const SHOW = [
   { key: "look_show_program", label: "Programmet dag för dag" },
   { key: "look_show_addons", label: "Tillval" },
   { key: "look_show_images", label: "Bilder på artiklar och lokaler (annars bara ikoner)" },
+  { key: "look_show_unit_prices", label: "Antal × à-pris på varje rad" },
+  { key: "look_show_group_totals", label: "Summa per grupp i gruppens rubrik" },
 ];
 
 export default async function QuoteSettingsPage({ searchParams }: { searchParams: Promise<{ sparad?: string; fel?: string }> }) {
@@ -28,6 +31,7 @@ export default async function QuoteSettingsPage({ searchParams }: { searchParams
   const s = new Map(((data ?? []) as { key: string; value: string }[]).map((x) => [x.key, x.value]));
   const cover = s.get("look_cover") ?? "";
   const uploadedCover = cover && !FCC_PHOTOS.includes(cover) ? cover : null;
+  const look = lookFrom(Object.fromEntries(s), "sv");
 
   return (
     <div className="grid gap-5 max-w-6xl">
@@ -41,6 +45,10 @@ export default async function QuoteSettingsPage({ searchParams }: { searchParams
       {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Sparat. Inledning och villkor gäller nya offerter; utseende och avslutning gäller alla direkt.</p>}
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
       {!admin && <p className="text-sm text-muted">Bara administratörer kan ändra här.</p>}
+      <div>
+        <a className="btn" href="/forhandsvisning/offert" target="_blank" rel="noreferrer">Förhandsgranska med senaste offerten ↗</a>
+        <span className="ml-3 text-sm text-muted">Spara först, så syns ändringarna. PDF:en följer samma inställningar.</span>
+      </div>
 
       <form action={saveQuoteSettings} className="grid gap-5">
         <fieldset disabled={!admin} className="card p-5 grid gap-5">
@@ -64,6 +72,81 @@ export default async function QuoteSettingsPage({ searchParams }: { searchParams
           <div className="field w-40">
             <label className="label" htmlFor="quote_valid_days">Giltighet i dagar</label>
             <input className="input" id="quote_valid_days" name="quote_valid_days" type="number" min={1} max={365} defaultValue={s.get("quote_valid_days") ?? "30"} />
+          </div>
+        </fieldset>
+
+        <fieldset disabled={!admin} className="card p-5 grid gap-5">
+          <legend className="text-lg font-semibold float-left w-full">Utseende</legend>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <div className="field">
+              <label className="label" htmlFor="look_accent">Accentfärg</label>
+              <div className="flex items-center gap-2">
+                <input type="color" id="look_accent" name="look_accent" defaultValue={look.accent} className="h-10 w-14 cursor-pointer rounded border border-line bg-surface" />
+                <span className="text-xs text-muted">Rubriker, knappar, belopp och sidhuvud. FCC:s vinröda är #60272b.</span>
+              </div>
+            </div>
+            <fieldset className="field">
+              <legend className="label">Omslag</legend>
+              {[["stor", "Stor bild"], ["kompakt", "Kompakt bild"], ["ingen", "Ingen bild, bara färg"]].map(([v, l]) => (
+                <label key={v} className="flex items-center gap-2 text-sm"><input type="radio" name="look_hero" value={v} defaultChecked={look.hero === v} /> {l}</label>
+              ))}
+            </fieldset>
+            <fieldset className="field">
+              <legend className="label">Rubriker</legend>
+              <label className="flex items-center gap-2 text-sm"><input type="radio" name="look_font" value="modern" defaultChecked={look.font === "modern"} /> <span className="font-display">Modern (Jost)</span></label>
+              <label className="flex items-center gap-2 text-sm"><input type="radio" name="look_font" value="klassisk" defaultChecked={look.font === "klassisk"} /> <span style={{ fontFamily: "Georgia, serif" }}>Klassisk (serif)</span></label>
+            </fieldset>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-[1fr_1fr] border-t border-line pt-4">
+            <div className="grid gap-2">
+              <span className="label">Logga i sidhuvudet</span>
+              {look.logo ? (
+                <div className="flex items-center gap-3">
+                  <span className="relative block h-10 w-40 rounded bg-brand p-1">
+                    <Image src={look.logo} alt="Nuvarande logga" fill sizes="160px" className="object-contain" />
+                  </span>
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="look_logo" value="" /> Ta bort (visa namnet)</label>
+                </div>
+              ) : (
+                <p className="text-sm text-muted">Ingen logga, företagsnamnet visas i stället.</p>
+              )}
+              <input type="hidden" name="look_logo" value="keep" />
+              <ImageInput name="look_logo_file" label="Ladda upp logga (helst vit eller ljus PNG)" />
+            </div>
+            <fieldset className="grid gap-2">
+              <legend className="label mb-1">Ordning på delarna</legend>
+              <p className="text-xs text-muted -mt-1">Lägst nummer först. Svarsformuläret ligger alltid sist.</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                {look.order.map((id, i) => (
+                  <label key={id} className="flex items-center gap-2 text-sm">
+                    <input className="input w-16 py-1 text-right" type="number" min={1} max={20} name={`order_${id}`} defaultValue={i + 1} aria-label={`Plats för ${SECTIONS.find((x) => x.id === id)?.label}`} />
+                    {SECTIONS.find((x) => x.id === id)?.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        </fieldset>
+
+        <fieldset disabled={!admin} className="card p-5 grid gap-4">
+          <legend className="text-lg font-semibold float-left w-full">Eget textblock</legend>
+          <p className="text-sm text-muted -mt-1">Till exempel ”Om Filadelfia Convention Center”, hitta hit eller hållbarhet. Visas där du placerar det i ordningen ovan. Tomt = visas inte.</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <input className="input" name="look_about_title" defaultValue={s.get("look_about_title") ?? ""} placeholder="Rubrik på svenska" aria-label="Rubrik på svenska" />
+            <input className="input" name="look_about_title_en" defaultValue={s.get("look_about_title_en") ?? ""} placeholder="Heading in English" aria-label="Rubrik på engelska" lang="en" />
+            <textarea className="input min-h-32" name="look_about" defaultValue={s.get("look_about") ?? ""} placeholder="Text på svenska" aria-label="Text på svenska" />
+            <textarea className="input min-h-32" name="look_about_en" defaultValue={s.get("look_about_en") ?? ""} placeholder="Text in English" aria-label="Text på engelska" lang="en" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="field">
+              <label className="label" htmlFor="look_about_image">Bild till textblocket</label>
+              <select className="input" id="look_about_image" name="look_about_image" defaultValue="keep">
+                <option value="keep">Behåll {look.aboutImage ? (FCC_PHOTOS.includes(look.aboutImage) ? look.aboutImage.replace("/lokaler/", "") : "uppladdad bild") : "(ingen bild)"}</option>
+                <option value="">Ingen bild</option>
+                {FCC_PHOTOS.map((p) => <option key={p} value={p}>{p.replace("/lokaler/", "")}</option>)}
+              </select>
+            </div>
+            <ImageInput name="look_about_image_file" label="Eller ladda upp en bild" />
           </div>
         </fieldset>
 

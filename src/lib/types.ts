@@ -48,6 +48,9 @@ export type Company = {
   invoice_address: string | null;
   invoice_reference: string | null;
   notes: string | null;
+  commission_pct?: number | null;
+  commission_to?: string | null;
+  commission_note?: string | null;
 };
 
 export type Contact = {

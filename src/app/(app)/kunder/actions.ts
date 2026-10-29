@@ -19,6 +19,13 @@ function readCompany(fd: FormData) {
     invoice_address: opt(fd.get("invoice_address")),
     invoice_reference: opt(fd.get("invoice_reference")),
     notes: opt(fd.get("notes")),
+    commission_pct: (() => {
+      const v = opt(fd.get("commission_pct"));
+      const n = v == null ? NaN : Number(v.replace(",", ".").replace("%", ""));
+      return Number.isFinite(n) && n > 0 ? Math.min(100, n) : null;
+    })(),
+    commission_to: opt(fd.get("commission_to")),
+    commission_note: opt(fd.get("commission_note")),
   };
 }
 

@@ -24,6 +24,11 @@ Menyn är uppdelad i sektioner med underflikar: **Översikt**, **Kalender** (vec
 - **Offert på engelska:** språk väljs per offert. Kundsidan, PDF:en, gruppnamn, artikelnamn (`articles.name_en`), lokalnamn och texter visas på engelska. En rad vars text är ändrad för hand visas som den är. Hela dokumentet byggs av `quote_doc()` i databasen; kundlänken går via `public_quote()`.
 - **Inställningar → Offert:** inledning, avslutning och avtalsvillkor på svenska och engelska, giltighet, omslagsbild och vilka delar som visas.
 - **Personal** (`/personal`): funktioner med färg och timpris, personer (intern, frilans, leverantör) med funktioner, pass kopplade till evenemang eller fristående. Internpersonal söker pass i **personalportalen** (`/portal`, rollen *personal* ser bara den) och planerare (admin, bokare, produktion) godkänner. Evenemanget visar bemanning per funktion (t.ex. Garderob 8/10) och personalkostnad. Frilans och leverantörer ser sina pass på en personlig länk (`/pass/<token>`). Inbjudningslänkar till portalen skapas av edge-funktionen `invite-staff`.
+- **Tid och attest** (`/personal/tid`): personalen rapporterar tid i portalen eller via sin länk; planerare attesterar (inte egen tid), avvisar, låser månaden och laddar ner Excel-underlag. Låsningen ligger i databasen.
+- **Frilans och leverantörer:** kö per pass med svarstid; frågan går vidare vid nej eller utgången tid (`advance_invites()`, pg_cron var femte minut). Leverantörspass bekräftas via länken. Mejl hamnar i `email_outbox` och visas under Inställningar → E-post tills en e-posttjänst kopplas.
+- **Appnotiser** (web push) i personalportalen: VAPID-nycklar i Vercel (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`).
+- **Provision per kund** visas som påminnelse på offerten och dras av i den interna kalkylen.
+- **Offertens utseende** (Inställningar → Offert): accentfärg, logga, omslag, rubriktypsnitt, ordning på delarna, kolumner och ett eget textblock. Gäller kundlänk och PDF. Förhandsvisning på `/forhandsvisning/offert`.
 - **Kunder** med kontaktpersoner.
 - **Lokaler** med kapacitet per möblering.
 - **Roller:** Admin, Bokare, Produktion och Läsbehörighet. Admin och bokare ändrar bokningar, övriga läser. Reglerna ligger i databasen (Row Level Security), inte bara i gränssnittet.

@@ -7,11 +7,10 @@ import { longDate, money, num, strings, timeSpan, unitLabel } from "@/lib/sprak"
 import { groupLines, type QuoteDoc } from "@/lib/offert-doc";
 
 // PDF för en offert. Inbyggt typsnitt (Helvetica) som klarar å, ä och ö.
-const BRAND = "#60272B";
 const MUTED = "#7a6466";
 const LINE = "#e4d9d7";
 
-const s = StyleSheet.create({
+const makeStyles = (BRAND: string) => StyleSheet.create({
   page: { paddingTop: 40, paddingBottom: 56, paddingHorizontal: 44, fontSize: 9.5, fontFamily: "Helvetica", color: "#2a1c1d", lineHeight: 1.35 },
   band: { position: "absolute", top: 0, left: 0, right: 0, height: 8, backgroundColor: BRAND },
   head: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 },
@@ -55,6 +54,8 @@ const shortDate = (d: string | null) => (d ? `${Number(d.slice(8, 10))}/${Number
 export type PdfImages = Map<string, Buffer>;
 
 function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
+  const BRAND = doc.look.accent;
+  const s = makeStyles(BRAND);
   const lang = doc.language;
   const L = strings(lang);
   const look = doc.look;
@@ -69,7 +70,7 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
       <Text style={s.cDesc}>{L.desc}</Text>
       <Text style={s.cDate}>{L.date}</Text>
       <Text style={s.cQty}>{L.qty}</Text>
-      <Text style={s.cPrice}>{L.unitPrice}</Text>
+      {look.showUnitPrices && <Text style={s.cPrice}>{L.unitPrice}</Text>}
       <Text style={s.cDisc}>{L.discount}</Text>
       <Text style={s.cSum}>{L.amount}</Text>
     </View>
@@ -93,7 +94,7 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
       </View>
       <Text style={s.cDate}>{shortDate(l.line_date)}</Text>
       <Text style={s.cQty}>{`${num(l.quantity, lang)} ${unitLabel(l.unit, l.quantity, lang)}`}</Text>
-      <Text style={s.cPrice}>{money(l.unit_price, lang)}</Text>
+      {look.showUnitPrices && <Text style={s.cPrice}>{money(l.unit_price, lang)}</Text>}
       <Text style={s.cDisc}>{l.discount_pct ? `${l.discount_pct} %` : ""}</Text>
       <Text style={s.cSum}>{money(lineTotal(l), lang)}</Text>
     </View>
@@ -105,7 +106,13 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
         <View style={s.band} fixed />
         <View style={s.head}>
           <View>
-            <Text style={s.brand}>{doc.company.name.toUpperCase()}</Text>
+            {look.logo && images.has(look.logo) ? (
+              <View style={{ backgroundColor: BRAND, padding: 6, borderRadius: 3, marginBottom: 4, alignSelf: "flex-start" }}>
+                <Image src={images.get(look.logo)!} style={{ height: 26, maxWidth: 150, objectFit: "contain" }} />
+              </View>
+            ) : (
+              <Text style={s.brand}>{doc.company.name.toUpperCase()}</Text>
+            )}
             <Text style={s.brandSub}>{addressLine(doc.company)}</Text>
           </View>
           <View>
@@ -116,7 +123,7 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
           </View>
         </View>
 
-        {cover && look.showImages && <Image style={s.hero} src={images.get(cover)!} />}
+        {cover && look.showImages && look.hero !== "ingen" && <Image style={[s.hero, look.hero === "kompakt" ? { height: 90 } : {}]} src={images.get(cover)!} />}
 
         <Text style={s.title}>{doc.title}</Text>
         <View style={s.infoRow}>
@@ -197,6 +204,16 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
 
         {look.closing && <Text style={[s.para, { marginTop: 14, color: BRAND, fontSize: 10.5 }]}>{look.closing}</Text>}
 
+        {(look.about || look.aboutTitle) && (
+          <View wrap={false} style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
+            {look.aboutImage && images.has(look.aboutImage) && <Image src={images.get(look.aboutImage)!} style={{ width: 130, height: 86, objectFit: "cover", borderRadius: 2 }} />}
+            <View style={{ flexGrow: 1, flexBasis: 0 }}>
+              {look.aboutTitle && <Text style={[s.h2, { marginTop: 0 }]}>{look.aboutTitle}</Text>}
+              {look.about && <Text style={{ fontSize: 9 }}>{look.about}</Text>}
+            </View>
+          </View>
+        )}
+
         {doc.terms && (
           <View wrap>
             <Text style={s.h2}>{L.terms}</Text>
@@ -229,7 +246,7 @@ const okImage = (p: string | null): p is string =>
 
 /** Hämtar lokal- och artikelbilder. Lokala sökvägar via sajtens egen adress. Misslyckas en bild hoppar vi bara över den. */
 export async function fetchPdfImages(doc: QuoteDoc, origin: string): Promise<PdfImages> {
-  const paths = [...new Set([doc.look.cover, ...doc.rooms.map((r) => r.image), ...doc.lines.map((l) => l.image)].filter(okImage))].slice(0, 24);
+  const paths = [...new Set([doc.look.logo, doc.look.aboutImage, doc.look.cover, ...doc.rooms.map((r) => r.image), ...doc.lines.map((l) => l.image)].filter(okImage))].slice(0, 26);
   const out: PdfImages = new Map();
   await Promise.all(
     paths.map(async (p) => {

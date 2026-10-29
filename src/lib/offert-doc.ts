@@ -52,6 +52,19 @@ export type QuoteDoc = {
 };
 
 /** Hur offerten ser ut (Inställningar → Offert). */
+export type QuoteSection = "intro" | "rooms" | "program" | "price" | "addons" | "closing" | "about" | "terms";
+export const SECTIONS: { id: QuoteSection; label: string }[] = [
+  { id: "intro", label: "Inledning" },
+  { id: "rooms", label: "Lokaler" },
+  { id: "program", label: "Program dag för dag" },
+  { id: "price", label: "Vad som ingår (priser)" },
+  { id: "addons", label: "Tillval" },
+  { id: "closing", label: "Avslutning" },
+  { id: "about", label: "Eget textblock" },
+  { id: "terms", label: "Villkor" },
+];
+const DEFAULT_ORDER: QuoteSection[] = SECTIONS.map((x) => x.id);
+
 export type QuoteLook = {
   cover: string;
   closing: string;
@@ -59,6 +72,20 @@ export type QuoteLook = {
   showProgram: boolean;
   showAddons: boolean;
   showImages: boolean;
+  /** Accentfärg (#rrggbb). */
+  accent: string;
+  /** Logga i stället för företagsnamnet i sidhuvudet. */
+  logo: string;
+  /** Omslag: stor bild, kompakt bild eller bara färg. */
+  hero: "stor" | "kompakt" | "ingen";
+  /** Rubriker i Jost eller ett klassiskt typsnitt med serifer. */
+  font: "modern" | "klassisk";
+  order: QuoteSection[];
+  showUnitPrices: boolean;
+  showGroupTotals: boolean;
+  aboutTitle: string;
+  about: string;
+  aboutImage: string;
 };
 
 /** Som QuoteDoc men med inställningarna orörda, som databasen skickar dem. */
@@ -73,6 +100,19 @@ export function lookFrom(settings: Record<string, string> | undefined, language:
     showProgram: on("look_show_program"),
     showAddons: on("look_show_addons"),
     showImages: on("look_show_images"),
+    accent: /^#[0-9a-f]{6}$/i.test(settings?.look_accent ?? "") ? settings!.look_accent : "#60272b",
+    logo: settings?.look_logo ?? "",
+    hero: (["stor", "kompakt", "ingen"] as const).find((x) => x === settings?.look_hero) ?? "stor",
+    font: settings?.look_font === "klassisk" ? "klassisk" : "modern",
+    order: (() => {
+      const saved = (settings?.look_order ?? "").split(",").filter((x): x is QuoteSection => DEFAULT_ORDER.includes(x as QuoteSection));
+      return [...new Set([...saved, ...DEFAULT_ORDER])];
+    })(),
+    showUnitPrices: on("look_show_unit_prices"),
+    showGroupTotals: on("look_show_group_totals"),
+    aboutTitle: (language === "en" ? settings?.look_about_title_en : settings?.look_about_title) ?? "",
+    about: (language === "en" ? settings?.look_about_en : settings?.look_about) ?? "",
+    aboutImage: settings?.look_about_image ?? "",
   };
 }
 

@@ -45,6 +45,8 @@ export default async function QuotePage({
   const linkedEvent = quote.event_id ? (await supabase.from("events").select("id, title, status").eq("id", quote.event_id).maybeSingle()).data : null;
   if (linkedEvent && !events.some((e) => e.id === linkedEvent.id)) events.unshift(linkedEvent);
 
+  const customer = quote.company_id ? lookups.companies.find((c) => c.id === quote.company_id) : undefined;
+  const commission = customer?.commission_pct ? Number(customer.commission_pct) : null;
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host")}`;
   const shareUrl = `${origin}/offert/${quote.share_token}`;
@@ -70,6 +72,13 @@ export default async function QuotePage({
         </div>
       </div>
 
+      {commission && customer && (
+        <div className="rounded-lg border border-st-preliminar bg-st-preliminar-soft px-4 py-3 text-sm text-st-preliminar grid gap-0.5">
+          <strong>Observera: {customer.name} har {commission.toLocaleString("sv-SE")} % provision{customer.commission_to ? ` till ${customer.commission_to}` : ""}.</strong>
+          {customer.commission_note && <span>{customer.commission_note}</span>}
+          <span>Ta höjd för provisionen i priset. Den syns inte för kunden.</span>
+        </div>
+      )}
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
       {sp.sprak && <Ok>Språket är bytt. Inledning och villkor har bytts till standardtexterna på det nya språket.</Ok>}
       {sp.sparat && <Ok>{sp.sparat === "rader" ? "Raderna är sparade." : "Offerten är sparad."}</Ok>}
@@ -158,6 +167,7 @@ export default async function QuotePage({
           <p className="text-sm text-st-preliminar">Offerten är skickad. Ändringar syns direkt för kunden via länken.</p>
         )}
         <QuoteEditor
+          commissionPct={commission}
           groups={groups.map((g) => ({ id: g.id, name: g.name }))}
           articles={articles.map((a) => ({ ...a, price: a.price == null ? null : Number(a.price), cost: Number(a.cost), vat_rate: Number(a.vat_rate) }))}
           initial={lines.map((l) => ({

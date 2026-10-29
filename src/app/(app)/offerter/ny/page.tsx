@@ -23,6 +23,9 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
     .limit(300);
   const events = (data ?? []) as EventOverview[];
   const selected = events.find((e) => e.id === sp.evenemang);
+  const commissionOf = new Map(lookups.companies.filter((c) => c.commission_pct).map((c) => [c.id, Number(c.commission_pct)]));
+  const prov = (companyId: string | null | undefined) => (companyId && commissionOf.has(companyId) ? ` · ⚠ provision ${commissionOf.get(companyId)} %` : "");
+  const selectedCompany = selected?.company_id ? lookups.companies.find((c) => c.id === selected.company_id) : undefined;
 
   return (
     <form action={createQuote} className="grid gap-5 max-w-3xl">
@@ -31,6 +34,12 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
         <h1 className="text-2xl font-semibold">Ny offert</h1>
       </div>
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
+      {selectedCompany?.commission_pct ? (
+        <p className="rounded-lg border border-st-preliminar bg-st-preliminar-soft px-4 py-3 text-sm text-st-preliminar">
+          <strong>Observera: {selectedCompany.name} har {Number(selectedCompany.commission_pct)} % provision{selectedCompany.commission_to ? ` till ${selectedCompany.commission_to}` : ""}.</strong>
+          {selectedCompany.commission_note ? ` ${selectedCompany.commission_note}` : ""}
+        </p>
+      ) : null}
 
       <section className="card p-5 grid gap-4">
         <div className="field">
@@ -42,6 +51,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
                 {e.title}
                 {e.company_name ? ` · ${e.company_name}` : ""}
                 {e.starts_at && e.ends_at ? ` · ${fmtRange(e.starts_at, e.ends_at)}` : ""}
+                {prov(e.company_id)}
               </option>
             ))}
           </select>
@@ -67,7 +77,7 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           <label className="label" htmlFor="company_id">Kund (om inget evenemang är valt)</label>
           <select className="input" id="company_id" name="company_id" defaultValue="">
             <option value="">Välj kund</option>
-            {lookups.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {lookups.companies.map((c) => <option key={c.id} value={c.id}>{c.name}{prov(c.id)}</option>)}
           </select>
         </div>
       </section>
