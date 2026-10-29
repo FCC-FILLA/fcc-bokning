@@ -3,12 +3,12 @@ import { fmtDate } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
 import {
   addChecklistItem, addDefaultChecklist, deleteChecklistItem, deleteDocument, registerDocument, sendPortalLink, setDocumentFlag,
-  setPortalEnabled, toggleChecklistItem,
+  setChecklistAssignee, setPortalEnabled, toggleChecklistItem,
 } from "@/app/(app)/evenemang/eventsida-actions";
 import { CopyButton } from "@/components/copy-button";
 import { DocumentUpload } from "@/components/document-upload";
 
-type Item = { id: string; title: string; note: string | null; due_date: string | null; customer_visible: boolean; customer_can_check: boolean; done_at: string | null; done_by: string | null };
+type Item = { id: string; title: string; note: string | null; due_date: string | null; days_before: number | null; assignee_id: string | null; customer_visible: boolean; customer_can_check: boolean; done_at: string | null; done_by: string | null };
 type Doc = { id: string; name: string; size_bytes: number | null; public: boolean; staff: boolean; created_at: string };
 
 const size = (n: number | null) => (n == null ? "" : n > 1_048_576 ? `${(n / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} kB`);
@@ -18,12 +18,15 @@ export async function EventPortalAdmin({ eventId, sent, error }: { eventId: stri
   const p = await getProfile();
   const editor = canBook(p) || canManageStaff(p);
   const supabase = await createClient();
-  const [{ data: ev }, { data: items }, { data: docs }, { data: site }] = await Promise.all([
+  const [{ data: ev }, { data: items }, { data: docs }, { data: site }, { data: people }] = await Promise.all([
     supabase.from("events").select("share_token, portal_enabled, status, contacts(email), companies(email)").eq("id", eventId).single(),
     supabase.from("event_checklist").select("*").eq("event_id", eventId).order("due_date", { nullsFirst: false }).order("sort_order"),
     supabase.from("event_documents").select("id, name, size_bytes, public, staff, created_at").eq("event_id", eventId).order("created_at", { ascending: false }),
     supabase.from("app_settings").select("value").eq("key", "site_url").maybeSingle(),
+    supabase.from("profiles").select("id, full_name, email").eq("active", true).in("role", ["admin", "bokare", "produktion"]).order("full_name"),
   ]);
+  const staffList = (people ?? []) as { id: string; full_name: string | null; email: string }[];
+  const personName = new Map(staffList.map((x) => [x.id, x.full_name || x.email]));
   if (!ev) return null;
   const e = ev as unknown as { share_token: string; portal_enabled: boolean; status: string; contacts: { email: string | null } | null; companies: { email: string | null } | null };
   const active = e.portal_enabled || e.status === "bekraftad" || e.status === "genomford";
@@ -72,7 +75,7 @@ export async function EventPortalAdmin({ eventId, sent, error }: { eventId: stri
 
       <div className="grid gap-2 border-t border-line pt-4">
         <div className="flex flex-wrap items-center gap-3">
-          <h3 className="font-semibold">Checklista</h3>
+          <h3 className="font-semibold">Checklista och uppgifter</h3>
           <span className="text-sm text-muted">{list.filter((x) => x.done_at).length} av {list.length} klara</span>
           {editor && (
             <form action={addDefaultChecklist.bind(null, eventId)} className="ml-auto">
@@ -97,7 +100,22 @@ export async function EventPortalAdmin({ eventId, sent, error }: { eventId: stri
                     {x.note && <span className="block text-xs text-muted">{x.note}</span>}
                     {x.done_at && <span className="block text-xs text-muted">Klar {fmtDate(x.done_at)}{x.done_by ? ` av ${x.done_by}` : ""}</span>}
                   </span>
-                  {x.due_date && <span className={`text-sm tabular-nums ${late ? "text-warn font-semibold" : "text-muted"}`}>senast {fmtDate(x.due_date)}</span>}
+                  {x.due_date && (
+                    <span className={`text-sm tabular-nums ${late ? "text-warn font-semibold" : "text-muted"}`}>
+                      senast {fmtDate(x.due_date)}{x.days_before != null ? ` (${x.days_before} d före)` : ""}
+                    </span>
+                  )}
+                  {editor ? (
+                    <form action={setChecklistAssignee.bind(null, eventId, x.id)} className="flex items-center">
+                      <select name="assignee_id" defaultValue={x.assignee_id ?? ""} className="input h-8 py-0 text-xs w-36" aria-label={`Ansvarig för ${x.title}`}>
+                        <option value="">Ingen ansvarig</option>
+                        {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
+                      </select>
+                      <button className="btn btn-ghost px-1.5 text-xs" type="submit" aria-label="Spara ansvarig">✓</button>
+                    </form>
+                  ) : (
+                    x.assignee_id && <span className="text-xs">{personName.get(x.assignee_id)}</span>
+                  )}
                   <span className="text-xs text-muted">{x.customer_visible ? (x.customer_can_check ? "kunden bockar av" : "kunden ser") : "bara internt"}</span>
                   {editor && (
                     <form action={deleteChecklistItem.bind(null, eventId, x.id)}>
@@ -112,9 +130,16 @@ export async function EventPortalAdmin({ eventId, sent, error }: { eventId: stri
         {editor && (
           <form action={addChecklistItem.bind(null, eventId)} className="flex flex-wrap items-end gap-2">
             <div className="field grow min-w-56"><label className="label" htmlFor="cl-title">Ny punkt</label><input className="input" id="cl-title" name="title" required placeholder="T.ex. Skicka gästlista" /></div>
-            <div className="field"><label className="label" htmlFor="cl-due">Senast</label><input className="input" id="cl-due" name="due_date" type="date" /></div>
-            <label className="flex items-center gap-1.5 text-sm pb-2"><input type="checkbox" name="customer_visible" defaultChecked /> Kunden ser</label>
-            <label className="flex items-center gap-1.5 text-sm pb-2"><input type="checkbox" name="customer_can_check" defaultChecked /> Kunden bockar av</label>
+            <div className="field w-28"><label className="label" htmlFor="cl-days">Dagar före</label><input className="input" id="cl-days" name="days_before" type="number" min={-365} max={730} placeholder="t.ex. 14" /></div>
+            <div className="field"><label className="label" htmlFor="cl-due">eller datum</label><input className="input" id="cl-due" name="due_date" type="date" /></div>
+            <div className="field"><label className="label" htmlFor="cl-who">Ansvarig</label>
+              <select className="input" id="cl-who" name="assignee_id" defaultValue="">
+                <option value="">Ingen</option>
+                {staffList.map((s) => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
+              </select>
+            </div>
+            <label className="flex items-center gap-1.5 text-sm pb-2"><input type="checkbox" name="customer_visible" /> Kunden ser</label>
+            <label className="flex items-center gap-1.5 text-sm pb-2"><input type="checkbox" name="customer_can_check" /> Kunden bockar av</label>
             <button className="btn" type="submit">Lägg till</button>
           </form>
         )}

@@ -7,7 +7,16 @@ type Item = { href: string; label: string; adminOnly?: boolean };
 type Section = { id: string; label: string; href: string; items: Item[] };
 
 const SECTIONS: Section[] = [
-  { id: "oversikt", label: "Översikt", href: "/", items: [] },
+  {
+    id: "oversikt",
+    label: "Översikt",
+    href: "/",
+    items: [
+      { href: "/", label: "Översikt" },
+      { href: "/uppgifter", label: "Mina uppgifter" },
+      { href: "/notiser", label: "Notiser" },
+    ],
+  },
   {
     id: "kalender",
     label: "Kalender",

@@ -53,12 +53,17 @@ export async function addChecklistItem(eventId: string, fd: FormData) {
   const title = String(fd.get("title") ?? "").trim();
   if (!title) back(eventId, `fel=${encodeURIComponent("Skriv vad som ska göras.")}`);
   const due = String(fd.get("due_date") ?? "");
+  const daysRaw = String(fd.get("days_before") ?? "").trim();
+  const days = daysRaw === "" ? null : Math.round(Number(daysRaw));
+  const assignee = String(fd.get("assignee_id") ?? "");
   const supabase = await createClient();
   await supabase.from("event_checklist").insert({
     event_id: eventId,
     title: title.slice(0, 200),
     note: String(fd.get("note") ?? "").trim() || null,
-    due_date: /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
+    days_before: days != null && Number.isFinite(days) ? days : null,
+    due_date: (days == null || !Number.isFinite(days)) && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null,
+    assignee_id: /^[0-9a-f-]{36}$/i.test(assignee) ? assignee : null,
     customer_visible: fd.get("customer_visible") === "on",
     customer_can_check: fd.get("customer_can_check") === "on",
     sort_order: 999,
@@ -87,6 +92,7 @@ export async function addDefaultChecklist(eventId: string) {
       return {
         event_id: eventId,
         title: rest.join("|").trim(),
+        days_before: Number.isFinite(days) && d !== "" ? days : null,
         due_date: start && Number.isFinite(days) && d !== "" ? addDays(start, -days) : null,
         sort_order: i,
       };
@@ -132,5 +138,13 @@ export async function deleteDocument(eventId: string, docId: string) {
   const { data } = await supabase.from("event_documents").select("storage_path").eq("id", docId).single();
   if (data?.storage_path) await supabase.storage.from("dokument").remove([data.storage_path]);
   await supabase.from("event_documents").delete().eq("id", docId);
+  done(eventId);
+}
+
+export async function setChecklistAssignee(eventId: string, itemId: string, fd: FormData) {
+  await requireEditor();
+  const a = String(fd.get("assignee_id") ?? "");
+  const supabase = await createClient();
+  await supabase.from("event_checklist").update({ assignee_id: /^[0-9a-f-]{36}$/i.test(a) ? a : null }).eq("id", itemId);
   done(eventId);
 }

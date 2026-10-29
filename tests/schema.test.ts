@@ -801,3 +801,21 @@ describe("personalens uppgifter", () => {
     expect(JSON.stringify(basic.rows[0].b)).not.toContain("1234567890");
   });
 });
+
+describe("uppgifter och relativa datum", () => {
+  it("datum räknas från första bokningen och följer med när bokningen flyttas; påminnelse till ansvarig", async () => {
+    const ev = await book("Uppgiftstest", "bekraftad", "Birka", "2027-11-20T09:00+01", "2027-11-20T17:00+01");
+    await db.query("insert into event_checklist (event_id, title, days_before, assignee_id, customer_visible) values ($1, 'Beställ blommor', 14, $2, false)", [ev, ADMIN]);
+    const d = async () => (await db.query<{ due_date: string }>("select to_char(due_date, 'YYYY-MM-DD') as due_date from event_checklist where title = 'Beställ blommor'")).rows[0].due_date;
+    expect(await d()).toBe("2027-11-06");
+    await db.query("update bookings set starts_at = '2027-11-27T09:00+01', ends_at = '2027-11-27T17:00+01' where event_id = $1", [ev]);
+    expect(await d()).toBe("2027-11-13");
+    // Flytta till i dag så att påminnelsen går.
+    await db.query("update event_checklist set days_before = null, due_date = current_date where title = 'Beställ blommor'");
+    await db.query("update profiles set notify_kinds = '{offert,pass,tid,checklista,uppgift}' where id = $1", [ADMIN]);
+    const n = await db.query<{ n: number }>("select remind_due_tasks() as n");
+    expect(n.rows[0].n).toBeGreaterThanOrEqual(1);
+    const note = await db.query<{ title: string }>("select title from notifications where kind = 'uppgift' and profile_id = $1 order by created_at desc limit 1", [ADMIN]);
+    expect(note.rows[0].title).toBe("I dag: Beställ blommor");
+  });
+});

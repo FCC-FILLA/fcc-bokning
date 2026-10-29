@@ -12,6 +12,7 @@ const KINDS: { id: string; label: string; help: string }[] = [
   { id: "pass", label: "Pass", help: "när någon söker, tackar ja, tackar nej eller lämnar ett pass" },
   { id: "checklista", label: "Checklistor", help: "när en kund bockar av en punkt på eventsidan" },
   { id: "tid", label: "Tidrapporter", help: "när personal rapporterar sin tid" },
+  { id: "uppgift", label: "Uppgifter", help: "när du får en uppgift och dagen innan den ska vara klar" },
 ];
 
 type Row = { id: string; kind: string; title: string; body: string | null; link: string | null; created_at: string; read_at: string | null };
