@@ -83,7 +83,7 @@ describe("lokaler", () => {
     expect((await q("Rörstrand 1", "Rörstrandssalarna, hela")).rows[0].x).toBe(true);
     expect((await q("Rörstrandssalarna, hela", "Rörstrand 2")).rows[0].x).toBe(true);
     expect((await q("Rörstrand 1", "Rörstrand 2")).rows[0].x).toBe(false);
-    expect((await q("Lounge 1", "Rörstrandssalarna, hela")).rows[0].x).toBe(true);
+    expect((await q("Lounge 1", "Rörstrandssalarna, hela")).rows[0].x).toBe(false);
     expect((await q("Birka", "Rörstrand 1")).rows[0].x).toBe(false);
   });
 });
