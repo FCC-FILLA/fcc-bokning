@@ -2,7 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireProfile } from "@/lib/auth";
-import { fmtDate } from "@/lib/datum";
+import { addDays, fmtDate, todayDate } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Uppgifter" };
@@ -39,11 +39,12 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const rows = ((data ?? []) as unknown as Row[]).filter(
     (r) => all || r.assignee_id === me.id || (!r.assignee_id && r.events?.responsible_id === me.id),
   );
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDate();
+  const tomorrow = addDays(today, 1);
   const groups: { label: string; list: Row[]; tone?: string }[] = [
     { label: "Försenade", list: rows.filter((r) => r.due_date && r.due_date < today), tone: "text-warn" },
-    { label: "I dag och i morgon", list: rows.filter((r) => r.due_date && r.due_date >= today && r.due_date <= new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) },
-    { label: "Kommande", list: rows.filter((r) => r.due_date && r.due_date > new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)) },
+    { label: "I dag och i morgon", list: rows.filter((r) => r.due_date && r.due_date >= today && r.due_date <= tomorrow) },
+    { label: "Kommande", list: rows.filter((r) => r.due_date && r.due_date > tomorrow) },
     { label: "Utan datum", list: rows.filter((r) => !r.due_date) },
   ];
 
