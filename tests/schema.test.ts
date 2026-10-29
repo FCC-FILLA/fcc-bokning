@@ -74,15 +74,15 @@ beforeAll(async () => {
 describe("lokaler", () => {
   it("har alla lokaler från kapacitetstabellen", async () => {
     const r = await db.query<{ n: number }>("select count(*)::int as n from rooms");
-    expect(r.rows[0].n).toBe(19);
+    expect(r.rows[0].n).toBe(16);
   });
 
   it("vet att delar av en sal krockar med hela salen", async () => {
     const q = (a: string, b: string) =>
       db.query<{ x: boolean }>("select rooms_overlap((select id from rooms where name=$1),(select id from rooms where name=$2)) as x", [a, b]);
-    expect((await q("Läktare", "Stora salen, hela")).rows[0].x).toBe(true);
-    expect((await q("Stora salen, hela", "Balkong")).rows[0].x).toBe(true);
-    expect((await q("Läktare", "Balkong")).rows[0].x).toBe(false);
+    expect((await q("Rörstrand 1", "Rörstrandssalarna, hela")).rows[0].x).toBe(true);
+    expect((await q("Rörstrandssalarna, hela", "Rörstrand 2")).rows[0].x).toBe(true);
+    expect((await q("Rörstrand 1", "Rörstrand 2")).rows[0].x).toBe(false);
     expect((await q("Lounge 1", "Rörstrandssalarna, hela")).rows[0].x).toBe(true);
     expect((await q("Birka", "Rörstrand 1")).rows[0].x).toBe(false);
   });
@@ -90,10 +90,10 @@ describe("lokaler", () => {
 
 describe("krockkontroll", () => {
   it("hittar krock mellan hel sal och delyta, men inte mellan avbokade", async () => {
-    await book("Konsert", "bekraftad", "Stora salen, hela", "2027-03-01T12:00+01", "2027-03-01T23:00+01");
-    await book("Mässa", "preliminar", "Läktare", "2027-03-01T09:00+01", "2027-03-01T13:00+01");
-    await book("Gammal", "avbokad", "Balkong", "2027-03-01T15:00+01", "2027-03-01T16:00+01");
-    await book("Kväll", "bekraftad", "Läktare", "2027-03-02T09:00+01", "2027-03-02T13:00+01");
+    await book("Konsert", "bekraftad", "Rörstrandssalarna, hela", "2027-03-01T12:00+01", "2027-03-01T23:00+01");
+    await book("Mässa", "preliminar", "Rörstrand 3", "2027-03-01T09:00+01", "2027-03-01T13:00+01");
+    await book("Gammal", "avbokad", "Rörstrand 4", "2027-03-01T15:00+01", "2027-03-01T16:00+01");
+    await book("Kväll", "bekraftad", "Rörstrand 3", "2027-03-02T09:00+01", "2027-03-02T13:00+01");
 
     const c = await db.query<{ event_title: string; other_event_title: string }>(
       "select event_title, other_event_title from booking_conflicts order by event_title",
@@ -104,7 +104,7 @@ describe("krockkontroll", () => {
     ]);
 
     const pre = await db.query<{ event_title: string }>(
-      "select event_title from check_conflicts((select id from rooms where name='Balkong'), '2027-03-01T22:00+01', '2027-03-01T23:30+01')",
+      "select event_title from check_conflicts((select id from rooms where name='Rörstrand 4'), '2027-03-01T22:00+01', '2027-03-01T23:30+01')",
     );
     expect(pre.rows.map((r) => r.event_title)).toEqual(["Konsert"]);
   });
@@ -402,7 +402,7 @@ describe("personal", () => {
   });
 
   it("ser lediga pass i sina funktioner, kan söka och dra tillbaka, men inte söka fel funktion", async () => {
-    const ev = await book("Gala", "bekraftad", "Stora salen, hela", "2027-06-01T16:00+02", "2027-06-01T23:00+02");
+    const ev = await book("Gala", "bekraftad", "Stora salen", "2027-06-01T16:00+02", "2027-06-01T23:00+02");
     const mk = async (fn: string, status = "oppen") =>
       (
         await db.query<{ id: string }>(
