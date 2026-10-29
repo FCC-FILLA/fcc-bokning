@@ -52,6 +52,20 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
   const hidden = hiddenTypes(sp.dolj);
   const types = await loadEventTypes(supabase);
   const typeColor = new Map(types.map((t) => [t.id, t.color]));
+  // Offererade lokaler som inte är bokade: en rad per offert och dag.
+  const { data: offerData } = await supabase
+    .from("quote_rooms")
+    .select("starts_at, quote_id, quotes!inner(number, title, status)")
+    .in("quotes.status", ["utkast", "skickad"])
+    .lt("starts_at", dayStartIso(gridEnd))
+    .gte("starts_at", dayStartIso(gridStart));
+  const offersPerDay = new Map<string, Map<string, { id: string; label: string; start: string }>>();
+  for (const o of (offerData ?? []) as unknown as { starts_at: string; quote_id: string; quotes: { number: number; title: string } }[]) {
+    const d = isoToDate(o.starts_at);
+    const m = offersPerDay.get(d) ?? new Map();
+    if (!m.has(o.quote_id)) m.set(o.quote_id, { id: o.quote_id, label: `Offert ${o.quotes.number}: ${o.quotes.title}`, start: fmtTime(o.starts_at) });
+    offersPerDay.set(d, m);
+  }
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => (showCancelled || r.events.status !== "avbokad") && !hidden.has(r.events.event_type_id ?? NO_TYPE));
   const optionPlace = await loadOptionPlaces(supabase, rows.filter((r) => r.events.status === "forfragan" || r.events.status === "preliminar").map((r) => r.event_id));
 
@@ -180,6 +194,11 @@ export default async function MonthPage({ searchParams }: { searchParams: Promis
                       </Link>
                     );
                   })()}
+                  {[...(offersPerDay.get(d)?.values() ?? [])].map((o) => (
+                    <Link key={o.id} href={`/offerter/${o.id}#lokaler`} className="block truncate rounded border border-dashed border-brand/60 bg-brand-soft/40 px-1.5 py-0.5 text-xs text-brand" title={`${o.label} · offererat, inte bokat`}>
+                      <span className="font-mono opacity-80">{o.start}</span> {o.label}
+                    </Link>
+                  ))}
                   {list.length > MAX && (
                     <Link href={`/vecka?vecka=${mondayOf(d)}`} className="text-xs text-muted hover:underline px-1">
                       +{list.length - MAX} till

@@ -58,8 +58,12 @@ export default async function NewQuotePage({ searchParams }: { searchParams: Pro
           <span className="text-sm text-muted">Kund och kontakt hämtas från evenemanget.</span>
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="from_bookings" defaultChecked />
-          Lägg in evenemangets bokade lokaler som rader, med pris från prislistan
+          <input type="checkbox" name="from_bookings" />
+          Kopiera evenemangets lokaler och tider till offertens program
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="lines_from_bookings" />
+          Lägg också in lokalerna som prisrader (pris från prislistan)
         </label>
         <div className="field">
           <label className="label" htmlFor="title">Rubrik</label>

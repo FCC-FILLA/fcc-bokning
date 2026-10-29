@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireBooker } from "@/lib/auth";
-import { addDays, isoToDate, todayDate } from "@/lib/datum";
+import { addDays, isoToDate, localToIso, todayDate } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
 import type { Article } from "@/lib/types";
 
@@ -85,6 +85,10 @@ export async function createQuote(fd: FormData) {
   if (error || !q) fail("/offerter/ny", "Det gick inte att skapa offerten.");
 
   if (eventId && fd.get("from_bookings") === "on") {
+    const { data: b } = await supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note").eq("event_id", eventId);
+    if (b?.length) await supabase.from("quote_rooms").insert(b.map((x) => ({ ...x, quote_id: q!.id })));
+  }
+  if (eventId && fd.get("lines_from_bookings") === "on") {
     const lines = await linesFromBookings(eventId, q!.id);
     if (lines.length) await supabase.from("quote_lines").insert(lines);
   }
@@ -282,4 +286,80 @@ export async function deleteQuote(id: string) {
   await supabase.from("quotes").delete().eq("id", id);
   revalidatePath("/offerter");
   redirect("/offerter");
+}
+
+// ---------------------------------------------------------------------------
+// Offertens egna lokaler och tider (programmet). Syns i kalendern som offererat.
+// ---------------------------------------------------------------------------
+const roomsBack = (id: string, q = ""): never => redirect(`/offerter/${id}${q ? `?${q}` : ""}#lokaler`);
+
+export async function addQuoteRoom(id: string, fd: FormData) {
+  await requireBooker();
+  const room = opt(fd.get("room_id"));
+  const date = opt(fd.get("date"));
+  const from = opt(fd.get("from"));
+  const to = opt(fd.get("to"));
+  if (!room || !date || !from || !to) roomsBack(id, `fel=${encodeURIComponent("Välj lokal, datum och tid.")}`);
+  const overnight = to! <= from!;
+  const days = Math.min(31, Math.max(1, Math.round(Number(fd.get("days") ?? 1)) || 1));
+  const supabase = await createClient();
+  const rows = Array.from({ length: days }, (_, i) => ({
+    quote_id: id,
+    room_id: room,
+    starts_at: localToIso(`${addDays(date!, i)}T${from}`),
+    ends_at: localToIso(`${addDays(date!, i + (overnight ? 1 : 0))}T${to}`),
+    setup_id: opt(fd.get("setup_id")),
+    note: opt(fd.get("note")),
+  }));
+  const { error } = await supabase.from("quote_rooms").insert(rows);
+  if (error) roomsBack(id, `fel=${encodeURIComponent("Det gick inte att lägga till lokalen.")}`);
+  revalidatePath(`/offerter/${id}`);
+  revalidatePath("/vecka");
+  roomsBack(id);
+}
+
+export async function deleteQuoteRoom(id: string, roomRowId: string) {
+  await requireBooker();
+  const supabase = await createClient();
+  await supabase.from("quote_rooms").delete().eq("id", roomRowId).eq("quote_id", id);
+  revalidatePath(`/offerter/${id}`);
+  roomsBack(id);
+}
+
+/** Kopierar evenemangets bokningar till offerten som utgångspunkt. */
+export async function copyBookingsToQuote(id: string) {
+  await requireBooker();
+  const supabase = await createClient();
+  const { data: q } = await supabase.from("quotes").select("event_id").eq("id", id).single();
+  if (!q?.event_id) roomsBack(id, `fel=${encodeURIComponent("Offerten är inte kopplad till något evenemang.")}`);
+  const { data: b } = await supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note").eq("event_id", q!.event_id!);
+  if (!b?.length) roomsBack(id, `fel=${encodeURIComponent("Evenemanget har inga bokningar.")}`);
+  await supabase.from("quote_rooms").insert(b!.map((x) => ({ ...x, quote_id: id })));
+  revalidatePath(`/offerter/${id}`);
+  roomsBack(id);
+}
+
+/** Gör offertens lokaler till bokningar på evenemanget. Skapar ett evenemang om offerten saknar ett. */
+export async function bookQuoteRooms(id: string) {
+  await requireBooker();
+  const supabase = await createClient();
+  const { data: q } = await supabase.from("quotes").select("event_id, title, company_id, contact_id, salesperson_id, status").eq("id", id).single();
+  const { data: rooms } = await supabase.from("quote_rooms").select("room_id, starts_at, ends_at, setup_id, note").eq("quote_id", id);
+  if (!q || !rooms?.length) roomsBack(id, `fel=${encodeURIComponent("Offerten har inga lokaler att boka.")}`);
+  let eventId = q!.event_id as string | null;
+  if (!eventId) {
+    const { data: ev, error } = await supabase
+      .from("events")
+      .insert({ title: q!.title, company_id: q!.company_id, contact_id: q!.contact_id, responsible_id: q!.salesperson_id, status: q!.status === "accepterad" ? "bekraftad" : "preliminar" })
+      .select("id")
+      .single();
+    if (error || !ev) roomsBack(id, `fel=${encodeURIComponent("Det gick inte att skapa evenemanget.")}`);
+    eventId = ev!.id;
+    await supabase.from("quotes").update({ event_id: eventId }).eq("id", id);
+  }
+  const { error } = await supabase.from("bookings").insert(rooms!.map((r) => ({ ...r, event_id: eventId })));
+  if (error) roomsBack(id, `fel=${encodeURIComponent("Det gick inte att boka lokalerna.")}`);
+  await supabase.from("quote_rooms").delete().eq("quote_id", id);
+  revalidatePath("/", "layout");
+  redirect(`/evenemang/${eventId}?tillagt=${rooms!.length}#bokningar`);
 }

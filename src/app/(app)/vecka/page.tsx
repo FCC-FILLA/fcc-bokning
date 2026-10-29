@@ -24,7 +24,7 @@ type Row = {
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ vecka?: string; avbokade?: string; personal?: string; dolj?: string }>;
+  searchParams: Promise<{ vecka?: string; avbokade?: string; personal?: string; dolj?: string; offerter?: string }>;
 }) {
   const sp = await searchParams;
   const today = todayDate();
@@ -32,6 +32,7 @@ export default async function SchedulePage({
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const showCancelled = sp.avbokade === "1";
   const showStaff = sp.personal === "1";
+  const showOffers = sp.offerter !== "0";
 
   const supabase = await createClient();
   const profile = await getProfile();
@@ -57,6 +58,15 @@ export default async function SchedulePage({
       : Promise.resolve({ data: [] }),
     loadEventTypes(supabase),
   ]);
+  // Offererade lokaler (utkast och skickade offerter) som ännu inte är bokade.
+  const { data: offerData } = await supabase
+    .from("quote_rooms")
+    .select("id, room_id, starts_at, ends_at, quote_id, quotes!inner(number, title, status)")
+    .in("quotes.status", ["utkast", "skickad"])
+    .lt("starts_at", dayStartIso(addDays(monday, 7)))
+    .gt("ends_at", dayStartIso(monday));
+  type OfferRow = { id: string; room_id: string; starts_at: string; ends_at: string; quote_id: string; quotes: { number: number; title: string; status: string } };
+  const offers = showOffers ? ((offerData ?? []) as unknown as OfferRow[]) : [];
   const typeColor = new Map(types.map((t) => [t.id, t.color]));
 
   const rooms = (roomData ?? []) as Room[];
@@ -93,9 +103,9 @@ export default async function SchedulePage({
     return `${s}–${e}`;
   };
 
-  const q = (vecka: string, o: { avbokade?: boolean; personal?: boolean; dolj?: string } = {}) => {
+  const q = (vecka: string, o: { avbokade?: boolean; personal?: boolean; dolj?: string; offerter?: boolean } = {}) => {
     const dolj = o.dolj ?? sp.dolj ?? "";
-    return `/vecka?vecka=${vecka}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}${dolj ? `&dolj=${dolj}` : ""}`;
+    return `/vecka?vecka=${vecka}${(o.avbokade ?? showCancelled) ? "&avbokade=1" : ""}${(o.personal ?? showStaff) ? "&personal=1" : ""}${dolj ? `&dolj=${dolj}` : ""}${(o.offerter ?? showOffers) ? "" : "&offerter=0"}`;
   };
 
   return (
@@ -111,6 +121,9 @@ export default async function SchedulePage({
         <span className="flex-1" />
         <Link className="text-sm text-muted underline-offset-2 hover:underline" href={q(monday, { avbokade: !showCancelled })}>
           {showCancelled ? "Dölj avbokade" : "Visa avbokade"}
+        </Link>
+        <Link className="text-sm text-muted underline-offset-2 hover:underline" href={q(monday, { offerter: !showOffers })}>
+          {showOffers ? "Dölj offerter" : "Visa offerter"}
         </Link>
         <Link className={`btn ${showStaff ? "btn-primary" : ""}`} href={q(monday, { personal: !showStaff })} aria-pressed={showStaff}>
           {showStaff ? "Dölj personal" : "Visa personal"}
@@ -129,6 +142,7 @@ export default async function SchedulePage({
         <span>Randig ruta: lokalen blockeras av en bokning i hela salen eller en del av den.</span>
         <span className="text-warn">Röd ram: krock.</span>
         <span>Färgad kant: evenemangstyp.</span>
+        <span className="text-brand">Streckad: offererat, inte bokat.</span>
       </div>
       <TypeFilter types={types} hidden={hidden} href={(dolj) => q(monday, { dolj })} />
 
@@ -169,6 +183,7 @@ export default async function SchedulePage({
                   </th>
                   {days.map((d) => {
                     const direct = visible.filter((b) => b.room_id === room.id && inDay(b, d));
+                    const offered = offers.filter((o) => o.room_id === room.id && o.starts_at < dayStartIso(addDays(d, 1)) && o.ends_at > dayStartIso(d));
                     const via = active.filter((b) => b.room_id !== room.id && overlap(b.room_id, room.id) && inDay(b, d));
                     const viaNames = [...new Set(via.map((b) => roomName.get(b.room_id)))].join(", ");
                     const weekend = weekday(d) >= 5;
@@ -202,6 +217,17 @@ export default async function SchedulePage({
                                 {optionPlace.has(b.event_id) && <span className="mr-1 rounded bg-white/70 px-1 font-mono text-[10px]">{optionOrdinal(optionPlace.get(b.event_id)!)}</span>}
                                 {b.events.title}
                               </span>
+                            </Link>
+                          ))}
+                          {offered.map((o) => (
+                            <Link
+                              key={o.id}
+                              href={`/offerter/${o.quote_id}#lokaler`}
+                              title={`Offert ${o.quotes.number} · ${o.quotes.title} · ${o.quotes.status === "utkast" ? "utkast" : "skickad"}, inte bokad`}
+                              className="pointer-events-auto block rounded-md border border-dashed border-brand/60 bg-brand-soft/40 px-1.5 py-0.5 text-xs leading-tight text-brand"
+                            >
+                              <span className="block font-mono opacity-80">{fmtTime(o.starts_at)}–{fmtTime(o.ends_at)}</span>
+                              <span className="block truncate font-semibold">Offert {o.quotes.number}: {o.quotes.title}</span>
                             </Link>
                           ))}
                           {via.length > 0 && (

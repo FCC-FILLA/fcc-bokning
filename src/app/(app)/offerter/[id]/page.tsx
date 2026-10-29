@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { canBook, requireProfile } from "@/lib/auth";
 import { fmtDate } from "@/lib/datum";
 import { getLookups } from "@/lib/lookups";
+import { QuoteRooms } from "@/components/quote-rooms";
 import { QUOTE_STATUS_LABEL } from "@/lib/offert";
 import { createClient } from "@/lib/supabase/server";
 import type { Article, ArticleGroup, Quote, QuoteLine } from "@/lib/types";
@@ -151,6 +152,8 @@ export default async function QuotePage({
           </>
         )}
       </section>
+
+      <QuoteRooms quoteId={id} eventId={quote.event_id} lookups={lookups} locked={locked} error={sp.fel} />
 
       {/* Rader */}
       <form id="rader" action={saveLines.bind(null, id)} className="card p-5 grid gap-4 scroll-mt-20">

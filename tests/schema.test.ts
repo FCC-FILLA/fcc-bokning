@@ -819,3 +819,13 @@ describe("uppgifter och relativa datum", () => {
     expect(note.rows[0].title).toBe("I dag: Beställ blommor");
   });
 });
+
+describe("offertens egna lokaler", () => {
+  it("offertens lokaler blir programmet; utan egna lokaler används evenemangets bokningar", async () => {
+    const q = await db.query<{ id: string }>("insert into quotes (title, status) values ('Lokaltest', 'skickad') returning id");
+    await db.query("insert into quote_rooms (quote_id, room_id, starts_at, ends_at) values ($1, (select id from rooms where name = 'Birka'), '2028-01-10T09:00+01', '2028-01-10T12:00+01')", [q.rows[0].id]);
+    const d = await asUser(ADMIN, () => db.query<{ d: { bookings: { room: string }[]; rooms: { name: string }[] } }>("select quote_doc($1) as d", [q.rows[0].id]));
+    expect(d.rows[0].d.bookings.map((b) => b.room)).toEqual(["Birka"]);
+    expect(d.rows[0].d.rooms.map((r) => r.name)).toEqual(["Birka"]);
+  });
+});
