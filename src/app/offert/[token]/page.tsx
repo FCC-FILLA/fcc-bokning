@@ -3,6 +3,7 @@ import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { dayLong, fmtDate, fmtDayMonth, fmtTime, isoToDate } from "@/lib/datum";
 import { fmtKr, lineTotal, quoteTotals } from "@/lib/offert";
+import { footerParts } from "@/lib/foretag";
 import { groupLines, loadPublicDoc, type QuoteDoc } from "@/lib/offert-doc";
 import { createClient } from "@/lib/supabase/server";
 import { ArticleIcon } from "@/components/icon";
@@ -89,7 +90,7 @@ export default async function PublicQuotePage({
         <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#2a1012] via-[#2a1012]/70 to-[#2a1012]/30" />
         <div className="mx-auto max-w-5xl px-4 pt-6 pb-10 sm:pb-14 grid gap-16 sm:gap-24">
           <div className="flex items-center justify-between gap-4 text-sm">
-            <p className="font-display font-semibold tracking-[0.18em] uppercase text-xs sm:text-sm">Filadelfia Convention Center</p>
+            <p className="font-display font-semibold tracking-[0.18em] uppercase text-xs sm:text-sm">{doc.company.name}</p>
             <p className="opacity-85 tabular-nums">Offert nr {doc.number}</p>
           </div>
           <div className="grid gap-4 max-w-3xl">
@@ -276,15 +277,20 @@ export default async function PublicQuotePage({
           </div>
           <div className="card p-5 grid gap-1 text-sm">
             <span className="label">Er kontakt hos oss</span>
-            <span className="font-semibold">{doc.salesperson_name || "Filadelfia Convention Center"}</span>
+            <span className="font-semibold">{doc.salesperson_name || doc.company.name}</span>
             {doc.salesperson_email && <a className="break-all underline underline-offset-2" href={`mailto:${doc.salesperson_email}`}>{doc.salesperson_email}</a>}
+            {doc.company.phone && <a className="underline underline-offset-2" href={`tel:${doc.company.phone.replace(/[^\d+]/g, "")}`}>Växel {doc.company.phone}</a>}
           </div>
         </aside>
       </main>
 
       <footer className="border-t border-line">
-        <div className="mx-auto max-w-5xl px-4 py-6 text-xs text-muted flex flex-wrap justify-between gap-2">
-          <span>Filadelfia Convention Center AB · Rörstrandsgatan 5, Stockholm</span>
+        <div className="mx-auto max-w-5xl px-4 py-6 text-xs text-muted flex flex-wrap justify-between gap-4">
+          <div className="grid gap-1">
+            {footerParts(doc.company).map((row, i) => (
+              <p key={i}>{row.join(" · ")}</p>
+            ))}
+          </div>
           <span>Offert nr {doc.number}</span>
         </div>
       </footer>

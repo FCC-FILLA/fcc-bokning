@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadCompany, toCompany, type Company } from "@/lib/foretag";
 import type { LineKind, QuoteStatus } from "@/lib/offert";
 
 export type QuoteRoom = { name: string; image: string | null; text: string | null; kvm: number | null; max: number | null };
@@ -21,6 +22,8 @@ export type QuoteDoc = {
   salesperson_email: string | null;
   event_title: string | null;
   participants: number | null;
+  /** Säljarens företagsuppgifter (Inställningar → Företagsuppgifter). */
+  company: Company;
   /** De bokade lokalerna med bild och säljtext, i lokallistans ordning. */
   rooms: QuoteRoom[];
   bookings: { room: string; starts_at: string; ends_at: string }[];
@@ -60,6 +63,7 @@ export function normalizeDoc(raw: QuoteDoc): QuoteDoc {
     })),
     bookings: raw.bookings ?? [],
     participants: raw.participants ?? null,
+    company: toCompany(raw.company),
     rooms: (raw.rooms ?? []).map((r) => ({ ...r, kvm: r.kvm == null ? null : Number(r.kvm), max: r.max == null ? null : Number(r.max) })),
   };
 }
@@ -67,9 +71,9 @@ export function normalizeDoc(raw: QuoteDoc): QuoteDoc {
 /** Kundens version via delningslänken (fungerar utan inloggning). */
 export async function loadPublicDoc(supabase: SupabaseClient, token: string): Promise<QuoteDoc | null> {
   if (!/^[0-9a-f-]{36}$/i.test(token)) return null;
-  const { data, error } = await supabase.rpc("public_quote", { p_token: token });
+  const [{ data, error }, company] = await Promise.all([supabase.rpc("public_quote", { p_token: token }), loadCompany(supabase)]);
   if (error || !data) return null;
-  return normalizeDoc(data as QuoteDoc);
+  return normalizeDoc({ ...(data as QuoteDoc), company });
 }
 
 /** Samma dokument för inloggad personal, oavsett status (även utkast). */
@@ -115,7 +119,9 @@ export async function loadInternalDoc(supabase: SupabaseClient, id: string): Pro
     });
   const g = new Map(((groups ?? []) as { id: string; name: string; sort_order: number; icon: string }[]).map((x) => [x.id, x]));
   const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+  const company = await loadCompany(supabase);
   return normalizeDoc({
+    company,
     number: q.number,
     title: q.title,
     status: q.status,

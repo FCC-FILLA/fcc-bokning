@@ -316,3 +316,18 @@ describe("artikelbilder och ikoner", () => {
     expect(r.rows[0].n).toBe(0);
   });
 });
+
+describe("företagsuppgifter", () => {
+  it("kan läsas utloggad via public_company men inte resten av inställningarna", async () => {
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ c: Record<string, string> }>("select public_company() as c");
+      expect(r.rows[0].c).toMatchObject({ name: "Filadelfia Convention Center", legal_name: "Filadelfia Convention Center AB" });
+      expect(Object.keys(r.rows[0].c).some((k) => k.startsWith("quote_"))).toBe(false);
+      await expect(db.query("select * from app_settings")).rejects.toThrow();
+    } finally {
+      await db.exec("reset role");
+    }
+  });
+});
+

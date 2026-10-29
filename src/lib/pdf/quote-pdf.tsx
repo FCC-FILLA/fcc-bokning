@@ -1,5 +1,6 @@
 /* eslint-disable jsx-a11y/alt-text -- react-pdf:s Image har ingen alt-text */
 import { Document, Image, Page, Path, StyleSheet, Svg, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { addressLine, footerParts } from "@/lib/foretag";
 import { iconPaths } from "@/lib/ikoner";
 import { fmtDate, fmtRange } from "@/lib/datum";
 import { fmtKr, lineTotal, quoteTotals } from "@/lib/offert";
@@ -45,7 +46,7 @@ const s = StyleSheet.create({
   roomImg: { width: 96, height: 64, objectFit: "cover", borderRadius: 2 },
   roomName: { fontFamily: "Helvetica-Bold", fontSize: 10 },
   roomFacts: { fontSize: 8, color: MUTED, marginBottom: 2 },
-  footerLeft: { position: "absolute", bottom: 24, left: 44, fontSize: 7.5, color: MUTED },
+  footerLeft: { position: "absolute", bottom: 18, left: 44, right: 44, fontSize: 7, color: MUTED, lineHeight: 1.4 },
 });
 
 const shortDate = (d: string | null) => (d ? `${Number(d.slice(8, 10))}/${Number(d.slice(5, 7))}` : "");
@@ -95,13 +96,13 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
   );
 
   return (
-    <Document title={`Offert ${doc.number} – ${doc.title}`} author="Filadelfia Convention Center" language="sv">
+    <Document title={`Offert ${doc.number} – ${doc.title}`} author={doc.company.name} language="sv">
       <Page size="A4" style={s.page}>
         <View style={s.band} fixed />
         <View style={s.head}>
           <View>
-            <Text style={s.brand}>FILADELFIA CONVENTION CENTER</Text>
-            <Text style={s.brandSub}>Rörstrandsgatan 5, Stockholm</Text>
+            <Text style={s.brand}>{doc.company.name.toUpperCase()}</Text>
+            <Text style={s.brandSub}>{addressLine(doc.company)}</Text>
           </View>
           <View>
             <Text style={s.docType}>Offert</Text>
@@ -203,7 +204,11 @@ function QuotePdf({ doc, images }: { doc: QuoteDoc; images: PdfImages }) {
           </Text>
         )}
 
-        <Text style={s.footerLeft} fixed>{`Offert ${doc.number} · Filadelfia Convention Center AB · Rörstrandsgatan 5, Stockholm`}</Text>
+        <View style={s.footerLeft} fixed>
+          {footerParts(doc.company).map((row, i) => (
+            <Text key={i}>{(i === 0 ? [`Offert ${doc.number}`, ...row] : row).join(" · ")}</Text>
+          ))}
+        </View>
       </Page>
     </Document>
   );

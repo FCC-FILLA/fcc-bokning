@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { renderQuotePdf } from "../src/lib/pdf/quote-pdf";
 import type { QuoteDoc } from "../src/lib/offert-doc";
+import { DEFAULT_COMPANY } from "../src/lib/foretag";
 
 describe("offert-pdf", () => {
   it("skapar en PDF med svenska tecken", async () => {
@@ -22,6 +23,7 @@ describe("offert-pdf", () => {
       salesperson_email: null,
       event_title: "Vårkonsert",
       participants: 800,
+      company: { ...DEFAULT_COMPANY, orgnr: "556000-0000", phone: "08-123 45 67", web: "filadelfiaconventioncenter.se" },
       rooms: [{ name: "Stora salen, hela", image: "/lokaler/stora-salen.jpg", text: "Kyrksal med läktare.", kvm: 1200, max: 3000 }],
       bookings: [{ room: "Stora salen, hela", starts_at: "2027-03-05T06:00:00Z", ends_at: "2027-03-05T22:00:00Z" }],
       lines: [

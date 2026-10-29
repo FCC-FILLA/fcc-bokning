@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { isAdmin, requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { loadCompany } from "@/lib/foretag";
 import { ROLE_LABEL } from "@/lib/types";
 import { ArticleIcon } from "@/components/icon";
 
@@ -13,6 +14,7 @@ export default async function SettingsPage() {
   const admin = isAdmin(profile);
   const supabase = await createClient();
   const count = async (q: PromiseLike<{ count: number | null }>) => (await q).count ?? 0;
+  const company = await loadCompany(supabase);
   const [rooms, articles, noPrice, withText, users, inactiveUsers, calendar] = await Promise.all([
     count(supabase.from("rooms").select("id", { count: "exact", head: true }).eq("active", true)),
     count(supabase.from("articles").select("id", { count: "exact", head: true }).eq("active", true)),
@@ -35,7 +37,7 @@ export default async function SettingsPage() {
       href: "/prislista",
       title: "Prislista",
       text: "Artiklar med pris, kostnad och moms, samt bild, ikon och text som kunden ser i offerten.",
-      icon: "document",
+      icon: "discount",
       facts: [`${articles} artiklar`, noPrice ? `${noPrice} saknar pris` : "alla har pris", `${withText} har kundtext`],
     },
     {
@@ -44,6 +46,13 @@ export default async function SettingsPage() {
       text: "Inledning, villkor och giltighetstid som följer med varje ny offert.",
       icon: "host",
       facts: [],
+    },
+    {
+      href: "/installningar/foretag",
+      title: "Företagsuppgifter",
+      text: "Namn, adress, organisationsnummer och kontaktuppgifter som visas i offerter och PDF:er.",
+      icon: "document",
+      facts: company.orgnr ? [company.legal_name] : ["organisationsnummer saknas"],
     },
     {
       href: "/anvandare",

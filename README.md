@@ -77,7 +77,7 @@ tests/                 tester
 
 ## Offerter
 
-- **Prislista** (`/prislista`): artiklar i grupper med pris, kostnad, moms och enhet. Lokalartiklar kan kopplas till en lokal och föreslås då automatiskt när en offert skapas från ett evenemang. Standardtexter för inledning, villkor och giltighet finns under *Inställningar → Offerttexter* (`/installningar/offerttexter`). Bara admin ändrar.
+- **Prislista** (`/prislista`): artiklar i grupper med pris, kostnad, moms och enhet. Lokalartiklar kan kopplas till en lokal och föreslås då automatiskt när en offert skapas från ett evenemang. Standardtexter för inledning, villkor och giltighet finns under *Inställningar → Offerttexter* (`/installningar/offerttexter`). Namn, adress, org.nr, kontakt och bankgiro under *Inställningar → Företagsuppgifter* (`/installningar/foretag`); kundlänken läser dem via `public_company()`. Bara admin ändrar.
 - **Offert** (`/offerter`): rader per grupp, rabatt per rad eller på alla rader, tillval som inte ingår i totalen, intern kalkyl med kostnad och marginal.
 - **Kundlänk** (`/offert/<token>`): en säljande sida med stor bild, kort om varje bokad lokal (bild, säljtext, kvm, kapacitet), programmet dag för dag, prisuppställning och godkänn-knapp. Bilderna ligger i `public/lokaler/` och kopplas till lokalen via `rooms.image_path`; säljtexten i `rooms.sales_text` (dellokaler ärver från huvudlokalen). Blir aktiv när offerten markeras som skickad. Kunden kan läsa, ladda ner PDF och godkänna eller avböja. Länken kräver ingen inloggning men visar bara just den offerten och aldrig kostnader.
 - **PDF** skapas på servern med `@react-pdf/renderer`, med omslagsbild och lokalkort.

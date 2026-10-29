@@ -49,6 +49,7 @@ const SETTINGS: Section = {
     { href: "/lokaler", label: "Lokaler" },
     { href: "/prislista", label: "Prislista" },
     { href: "/installningar/offerttexter", label: "Offerttexter" },
+    { href: "/installningar/foretag", label: "Företagsuppgifter" },
     { href: "/anvandare", label: "Användare", adminOnly: true },
     { href: "/konto", label: "Mitt konto" },
   ],
