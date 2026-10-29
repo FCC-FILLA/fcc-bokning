@@ -32,10 +32,9 @@ Deno.serve(async (req) => {
   if (res.error || !res.data?.user) return json({ error: "Det gick inte att skapa länken." }, 500);
 
   const userId = res.data.user.id;
-  // Koppla ihop personposten och kontot. Ett befintligt konto med högre roll behåller sin roll.
+  // Koppla ihop personposten och kontot. Nya konton får rollen personal av databasen (handle_new_user);
+  // ett befintligt konto behåller sin roll.
   await admin.from("staff").update({ profile_id: userId }).eq("id", staff.id);
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", userId).single();
-  if (profile && profile.role === "lasare") await admin.from("profiles").update({ role: "personal", full_name: staff.name }).eq("id", userId);
 
   return json({ link: res.data.properties.action_link });
 });

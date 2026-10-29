@@ -23,6 +23,7 @@ Menyn är uppdelad i sektioner med underflikar: **Översikt**, **Kalender** (vec
 - **Lokaler** (`/lokaler/<id>`): namn (även engelska), överordnad lokal, kvm, kapacitet per möblering, säljtext på svenska och engelska och flera bilder per lokal (huvudbild plus bildspel). Uppladdade bilder ligger i hinken `lokaler`.
 - **Offert på engelska:** språk väljs per offert. Kundsidan, PDF:en, gruppnamn, artikelnamn (`articles.name_en`), lokalnamn och texter visas på engelska. En rad vars text är ändrad för hand visas som den är. Hela dokumentet byggs av `quote_doc()` i databasen; kundlänken går via `public_quote()`.
 - **Inställningar → Offert:** inledning, avslutning och avtalsvillkor på svenska och engelska, giltighet, omslagsbild och vilka delar som visas.
+- **Personal** (`/personal`): funktioner med färg och timpris, personer (intern, frilans, leverantör) med funktioner, pass kopplade till evenemang eller fristående. Internpersonal söker pass i **personalportalen** (`/portal`, rollen *personal* ser bara den) och planerare (admin, bokare, produktion) godkänner. Evenemanget visar bemanning per funktion (t.ex. Garderob 8/10) och personalkostnad. Frilans och leverantörer ser sina pass på en personlig länk (`/pass/<token>`). Inbjudningslänkar till portalen skapas av edge-funktionen `invite-staff`.
 - **Kunder** med kontaktpersoner.
 - **Lokaler** med kapacitet per möblering.
 - **Roller:** Admin, Bokare, Produktion och Läsbehörighet. Admin och bokare ändrar bokningar, övriga läser. Reglerna ligger i databasen (Row Level Security), inte bara i gränssnittet.
