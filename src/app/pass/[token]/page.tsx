@@ -58,11 +58,14 @@ export default async function LinkPage({
     return [...m];
   };
 
-  const card = (s: LinkShift) => (
+  const card = (s: LinkShift, withDate = false) => (
     <article key={s.id} id={`pass-${s.id}`} className="card p-4 grid gap-2 border-l-4 scroll-mt-4" style={{ borderLeftColor: s.color }}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="font-semibold">{s.function}{s.title ? ` · ${s.title}` : ""}{supplier && s.needed > 1 ? ` · ${s.needed} personer` : ""}</p>
-        <p className="tabular-nums font-medium">{fmtTime(s.starts_at)}–{fmtTime(s.ends_at)} <span className="text-sm text-muted">({shiftHours(s).toLocaleString("sv-SE")} h)</span></p>
+        <p className="tabular-nums font-medium">
+          {withDate && <span className="capitalize">{fmtDate(s.starts_at)} </span>}
+          {fmtTime(s.starts_at)}–{fmtTime(s.ends_at)} <span className="text-sm text-muted">({shiftHours(s).toLocaleString("sv-SE")} h)</span>
+        </p>
       </div>
       {(s.event || s.room) && <p className="text-sm text-muted">{[s.event, s.room].filter(Boolean).join(" · ")}</p>}
       {s.note && <p className="text-sm">{s.note}</p>}
@@ -100,14 +103,14 @@ export default async function LinkPage({
         {pending.length > 0 && (
           <section className="grid gap-2">
             <h2 className="font-display text-lg font-semibold">{supplier ? "Att bekräfta" : "Förfrågningar"}</h2>
-            {pending.map(card)}
+            {pending.map((s) => card(s, true))}
           </section>
         )}
 
         {group(upcoming).map(([date, list]) => (
           <section key={date} className="grid gap-2">
             <h2 className="font-display font-semibold">{fmtDate(date)}</h2>
-            {list.map(card)}
+            {list.map((s) => card(s))}
           </section>
         ))}
 
