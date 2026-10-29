@@ -41,6 +41,20 @@ export default async function SettingsPage() {
       facts: [`${articles} artiklar`, noPrice ? `${noPrice} saknar pris` : "alla har pris", `${withText} har kundtext`],
     },
     {
+      href: "/installningar/evenemangstyper",
+      title: "Evenemangstyper",
+      text: "Konferens, konsert, middag och de andra typerna, med egen omslagsbild i offerten och på kundens eventsida.",
+      icon: "stage",
+      facts: [],
+    },
+    {
+      href: "/installningar/bilder",
+      title: "Bilder",
+      text: "Bildbanken med alla bilder i systemet. Byt ut en bild här så ändras den överallt.",
+      icon: "camera",
+      facts: [],
+    },
+    {
       href: "/installningar/offert",
       title: "Offert",
       text: "Inledning, avslutning och avtalsvillkor på svenska och engelska, omslagsbild och vilka delar kunden ser.",

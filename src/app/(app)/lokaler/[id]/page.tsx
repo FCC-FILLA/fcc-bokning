@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
-import { FCC_PHOTOS } from "@/lib/bilder";
+import { loadLibrary } from "@/lib/bilder";
 import { depthOf, roomImages } from "@/lib/lokaler";
 import { createClient } from "@/lib/supabase/server";
 import type { Room, RoomCapacity, Setup } from "@/lib/types";
@@ -22,6 +22,7 @@ export default async function RoomPage({
   const sp = await searchParams;
   const admin = isAdmin(await requireProfile());
   const supabase = await createClient();
+  const library = await loadLibrary(supabase);
   const [{ data: r }, { data: s }, { data: c }] = await Promise.all([
     supabase.from("rooms").select("*").order("sort_order"),
     supabase.from("setups").select("*").order("sort_order"),
@@ -155,10 +156,10 @@ export default async function RoomPage({
         {admin && (
           <form action={addRoomImage.bind(null, id)} className="grid gap-4 border-t border-line pt-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
             <div className="field">
-              <label className="label" htmlFor="photo">Lägg till en av FCC:s bilder</label>
+              <label className="label" htmlFor="photo">Lägg till från bildbanken</label>
               <select className="input" id="photo" name="photo" defaultValue="">
                 <option value="">Välj bild</option>
-                {FCC_PHOTOS.filter((p) => !own.includes(p)).map((p) => <option key={p} value={p}>{p.replace("/lokaler/", "")}</option>)}
+                {library.filter((m) => !own.includes(m.url)).map((m) => <option key={m.id} value={m.url}>{m.name}</option>)}
               </select>
             </div>
             <ImageInput name="image" label="Eller ladda upp en egen" />

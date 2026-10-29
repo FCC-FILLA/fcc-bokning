@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 type Portal = {
   title: string;
   status: string;
+  event_type: string | null;
   participants: number | null;
   description: string | null;
   technical_info: string | null;
@@ -74,8 +75,14 @@ export default async function EventPortalPage({ params, searchParams }: { params
 
   return (
     <div className="min-h-dvh bg-bg" style={theme}>
-      <header className="bg-brand text-white">
-        <div className="mx-auto max-w-3xl px-4 py-6 grid gap-3">
+      <header className="relative isolate overflow-hidden bg-brand text-white">
+        {look.cover && look.hero !== "ingen" && (
+          <>
+            <Image src={look.cover} alt="" fill priority sizes="100vw" className="object-cover -z-20" />
+            <span className="absolute inset-0 -z-10 bg-gradient-to-t from-black/75 via-black/40 to-black/20" aria-hidden />
+          </>
+        )}
+        <div className={`mx-auto max-w-3xl px-4 grid gap-3 ${look.cover && look.hero === "stor" ? "pt-28 pb-8 sm:pt-40" : "py-6"}`}>
           {look.logo ? (
             <span className="relative block h-9 w-40"><Image src={look.logo} alt={company.name} fill sizes="160px" className="object-contain object-left" /></span>
           ) : (

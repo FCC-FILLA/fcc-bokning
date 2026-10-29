@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
-import { FCC_PHOTOS } from "@/lib/bilder";
+import { imageName, loadLibrary } from "@/lib/bilder";
 import { ICONS, ICON_KEYS } from "@/lib/ikoner";
 import { roomImages } from "@/lib/lokaler";
 import { createClient } from "@/lib/supabase/server";
@@ -25,6 +25,7 @@ export default async function ArticleMediaPage({
   const sp = await searchParams;
   const admin = isAdmin(await requireProfile());
   const supabase = await createClient();
+  const library = await loadLibrary(supabase);
   const [{ data: a }, { data: groups }, { data: rooms }] = await Promise.all([
     supabase.from("articles").select("*").eq("id", id).maybeSingle(),
     supabase.from("article_groups").select("id, name, name_en, icon"),
@@ -38,7 +39,6 @@ export default async function ArticleMediaPage({
   const parent = roomList.find((r) => r.id === room?.parent_id);
   const roomImage = room?.image_path ?? parent?.image_path ?? null;
   const image = art.image_path ?? roomImage;
-  const ownUpload = !!art.image_path && !art.image_path.startsWith("/lokaler/");
 
   const preview = {
     group: group?.name ?? "",
@@ -121,11 +121,11 @@ export default async function ArticleMediaPage({
           </p>
           <div className="grid gap-5 sm:grid-cols-2">
             <div className="field">
-              <label className="label" htmlFor="image_choice">Välj bland FCC:s bilder</label>
+              <label className="label" htmlFor="image_choice">Välj i bildbanken</label>
               <select className="input" id="image_choice" name="image_choice" defaultValue="keep">
-                <option value="keep">Behåll {art.image_path ? (ownUpload ? "uppladdad bild" : art.image_path.replace("/lokaler/", "")) : roomImage ? "lokalens bild" : "ikonen"}</option>
+                <option value="keep">Behåll {art.image_path ? imageName(library, art.image_path) : roomImage ? "lokalens bild" : "ikonen"}</option>
                 <option value="">{roomImage ? "Lokalens bild" : "Ingen bild, visa ikonen"}</option>
-                {FCC_PHOTOS.map((p) => <option key={p} value={p}>{p.replace("/lokaler/", "")}</option>)}
+                {library.map((m) => <option key={m.id} value={m.url}>{m.name}</option>)}
               </select>
             </div>
             <ImageInput name="image" label="Eller ladda upp en egen bild" />

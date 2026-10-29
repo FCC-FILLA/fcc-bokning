@@ -32,6 +32,8 @@ export default async function EventsPage({
 
   const { data } = await query.limit(300);
   const events = (data ?? []) as EventOverview[];
+  const { data: placeData } = await supabase.from("option_places").select("event_id, place").eq("shared", true).in("event_id", events.map((e) => e.id));
+  const optionPlace = new Map(((placeData ?? []) as { event_id: string; place: number }[]).map((x) => [x.event_id, x.place]));
 
   return (
     <>
@@ -90,7 +92,10 @@ export default async function EventsPage({
                     {e.starts_at && e.ends_at ? fmtRange(e.starts_at, e.ends_at) : <span className="text-muted">Inga tider än</span>}
                   </td>
                   <td>{e.booking_count}</td>
-                  <td><StatusPill status={e.status} /></td>
+                  <td className="whitespace-nowrap">
+                    <StatusPill status={e.status} />
+                    {optionPlace.has(e.id) && <span className="ml-2 text-xs font-semibold text-st-preliminar">{optionPlace.get(e.id)}:{optionPlace.get(e.id)! <= 2 ? "a" : "e"} option</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>

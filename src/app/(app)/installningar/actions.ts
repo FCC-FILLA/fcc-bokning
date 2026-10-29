@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
-import { isFccPhoto, storagePath, uploadImage } from "@/lib/bilder";
+import { inLibrary, uploadImage } from "@/lib/bilder";
 import { kickMail } from "@/lib/epost";
 import { COMPANY_FIELDS } from "@/lib/foretag";
 import { createClient } from "@/lib/supabase/server";
@@ -43,7 +43,7 @@ async function pickImage(supabase: Awaited<ReturnType<typeof createClient>>, fd:
   }
   const choice = String(fd.get(field) ?? "keep");
   if (choice === "keep") return { url: current };
-  if (choice === "" || isFccPhoto(choice) || (choice === current && storagePath(choice, "lokaler"))) return { url: choice };
+  if (choice === "" || choice === current || (await inLibrary(supabase, choice))) return { url: choice };
   return { url: current };
 }
 
@@ -70,7 +70,7 @@ export async function saveQuoteSettings(fd: FormData) {
     const up = await uploadImage(supabase, "lokaler", "omslag", file);
     if (up.error) redirect(`${path}?fel=${encodeURIComponent(up.error)}`);
     cover = up.url!;
-  } else if (cover && !isFccPhoto(cover) && !storagePath(cover, "lokaler")) {
+  } else if (cover && !(await inLibrary(supabase, cover))) {
     cover = "";
   }
 

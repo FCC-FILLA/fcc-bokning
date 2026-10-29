@@ -673,3 +673,55 @@ describe("eventlänk", () => {
     });
   });
 });
+
+describe("bildbank och bilder per evenemangstyp", () => {
+  it("FCC:s foton finns i banken och en bild kan bytas överallt på en gång", async () => {
+    const n = await db.query<{ n: number }>("select count(*)::int as n from media_images where url like '/lokaler/%'");
+    expect(n.rows[0].n).toBe(13);
+    await db.query("update rooms set image_path = '/lokaler/birka.jpg' where name = 'Birka'");
+    await db.query("insert into app_settings (key, value) values ('look_cover', '/lokaler/birka.jpg') on conflict (key) do update set value = excluded.value");
+    const ny = "https://x.supabase.co/storage/v1/object/public/lokaler/bildbank/ny.jpg";
+    await expect(asUser(LASARE, () => db.query("select replace_image('/lokaler/birka.jpg', $1)", [ny]))).rejects.toThrow();
+    const r = await asUser(ADMIN, () => db.query<{ n: number }>("select replace_image('/lokaler/birka.jpg', $1) as n", [ny]));
+    expect(r.rows[0].n).toBeGreaterThanOrEqual(2);
+    expect((await db.query<{ image_path: string }>("select image_path from rooms where name = 'Birka'")).rows[0].image_path).toBe(ny);
+    expect((await db.query<{ value: string }>("select value from app_settings where key = 'look_cover'")).rows[0].value).toBe(ny);
+    expect((await db.query("select 1 from media_images where url = $1", [ny])).rows).toHaveLength(1);
+  });
+
+  it("evenemangstypens omslag används i offerten och på eventlänken", async () => {
+    await db.query("update event_types set cover_image = '/lokaler/stora-salen.jpg' where id = 'konsert'");
+    const ev = await book("Julkonsert", "bekraftad", "Birka", "2027-12-10T18:00+01", "2027-12-10T22:00+01");
+    await db.query("update events set event_type_id = 'konsert' where id = $1", [ev]);
+    const q = await db.query<{ id: string }>("insert into quotes (title, status, event_id) values ('Julkonsert', 'skickad', $1) returning id", [ev]);
+    const doc = await asUser(ADMIN, () => db.query<{ d: { event_type: string; settings: Record<string, string> } }>("select quote_doc($1) as d", [q.rows[0].id]));
+    expect(doc.rows[0].d.event_type).toBe("Konsert");
+    expect(doc.rows[0].d.settings.look_cover).toBe("/lokaler/stora-salen.jpg");
+    const tok = (await db.query<{ share_token: string }>("select share_token from events where id = $1", [ev])).rows[0].share_token;
+    const p = await db.query<{ d: { settings: Record<string, string> } }>("select event_portal($1) as d", [tok]);
+    expect(p.rows[0].d.settings.look_cover).toBe("/lokaler/stora-salen.jpg");
+  });
+});
+
+describe("optioner i turordning", () => {
+  it("två preliminära på samma tid krockar inte utan står i kö, och kön går att ordna om", async () => {
+    const a = await book("Option A", "preliminar", "Karlbergssalen", "2027-09-10T09:00+02", "2027-09-10T17:00+02");
+    const b = await book("Option B", "forfragan", "Karlbergssalen", "2027-09-10T12:00+02", "2027-09-10T20:00+02");
+    const c = await db.query("select 1 from booking_conflicts where event_id in ($1, $2)", [a, b]);
+    expect(c.rows).toHaveLength(0);
+
+    const q = await db.query<{ title: string; place: number }>("select title, place from option_queue($1)", [b]);
+    expect(q.rows).toEqual([{ title: "Option A", place: 1 }, { title: "Option B", place: 2 }]);
+    await db.query("update events set option_rank = 1 where id = $1", [b]);
+    await db.query("update events set option_rank = 2 where id = $1", [a]);
+    const q2 = await db.query<{ title: string }>("select title from option_queue($1)", [a]);
+    expect(q2.rows.map((r) => r.title)).toEqual(["Option B", "Option A"]);
+    const places = await db.query<{ event_id: string; place: number; shared: boolean }>("select * from option_places where event_id in ($1, $2) order by place", [a, b]);
+    expect(places.rows.map((r) => [r.event_id, r.place, r.shared])).toEqual([[b, 1, true], [a, 2, true]]);
+
+    // När den ena bekräftas blir den andra en riktig krock.
+    await db.query("update events set status = 'bekraftad' where id = $1", [b]);
+    const c2 = await db.query("select 1 from booking_conflicts where event_id = $1", [a]);
+    expect(c2.rows.length).toBeGreaterThan(0);
+  });
+});

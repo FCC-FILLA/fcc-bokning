@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
-import { isFccPhoto, removeUploaded, uploadImage } from "@/lib/bilder";
+import { inLibrary, removeUploaded, uploadImage } from "@/lib/bilder";
 import { createClient } from "@/lib/supabase/server";
 
 const opt = (v: FormDataEntryValue | null) => {
@@ -95,7 +95,7 @@ export async function saveArticleMedia(id: string, fd: FormData) {
     if (up.error) back(`fel=${encodeURIComponent(up.error)}`);
     image_path = up.url!;
   } else if (choice !== "keep") {
-    image_path = choice === "" ? null : isFccPhoto(choice) ? choice : image_path;
+    image_path = choice === "" ? null : (await inLibrary(supabase, choice)) ? choice : image_path;
   }
 
   const { error } = await supabase

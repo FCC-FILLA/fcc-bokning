@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { isAdmin, requireProfile } from "@/lib/auth";
-import { FCC_PHOTOS } from "@/lib/bilder";
+import { imageName, loadLibrary } from "@/lib/bilder";
 import { SECTIONS, lookFrom } from "@/lib/offert-doc";
 import { createClient } from "@/lib/supabase/server";
 import { ImageInput } from "@/components/image-input";
@@ -30,7 +30,8 @@ export default async function QuoteSettingsPage({ searchParams }: { searchParams
   const { data } = await supabase.from("app_settings").select("key, value");
   const s = new Map(((data ?? []) as { key: string; value: string }[]).map((x) => [x.key, x.value]));
   const cover = s.get("look_cover") ?? "";
-  const uploadedCover = cover && !FCC_PHOTOS.includes(cover) ? cover : null;
+  const library = await loadLibrary(supabase);
+  const uploadedCover = cover && !library.some((m) => m.url === cover) ? cover : null;
   const look = lookFrom(Object.fromEntries(s), "sv");
 
   return (
@@ -141,9 +142,9 @@ export default async function QuoteSettingsPage({ searchParams }: { searchParams
             <div className="field">
               <label className="label" htmlFor="look_about_image">Bild till textblocket</label>
               <select className="input" id="look_about_image" name="look_about_image" defaultValue="keep">
-                <option value="keep">Behåll {look.aboutImage ? (FCC_PHOTOS.includes(look.aboutImage) ? look.aboutImage.replace("/lokaler/", "") : "uppladdad bild") : "(ingen bild)"}</option>
+                <option value="keep">Behåll {look.aboutImage ? imageName(library, look.aboutImage) : "(ingen bild)"}</option>
                 <option value="">Ingen bild</option>
-                {FCC_PHOTOS.map((p) => <option key={p} value={p}>{p.replace("/lokaler/", "")}</option>)}
+                {library.map((m) => <option key={m.id} value={m.url}>{m.name}</option>)}
               </select>
             </div>
             <ImageInput name="look_about_image_file" label="Eller ladda upp en bild" />
@@ -152,7 +153,7 @@ export default async function QuoteSettingsPage({ searchParams }: { searchParams
 
         <fieldset disabled={!admin} className="card p-5 grid gap-4">
           <legend className="text-lg font-semibold float-left w-full">Omslagsbild</legend>
-          <p className="text-sm text-muted -mt-1">Den stora bilden överst på kundens sida och i PDF:en.</p>
+          <p className="text-sm text-muted -mt-1">Den stora bilden överst på kundens sida och i PDF:en. Evenemangstyper kan ha en egen omslagsbild som går före den här (Inställningar → Evenemangstyper).</p>
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 lg:grid-cols-5">
             <CoverOption value="" checked={!cover} label="Första bokade lokalen">
               <span className="grid h-full place-items-center bg-sunk p-3 text-center text-xs text-muted">Bilden från den lokal som bokats först</span>
@@ -162,9 +163,9 @@ export default async function QuoteSettingsPage({ searchParams }: { searchParams
                 <Image src={uploadedCover} alt="" fill sizes="200px" className="object-cover" />
               </CoverOption>
             )}
-            {FCC_PHOTOS.map((p) => (
-              <CoverOption key={p} value={p} checked={cover === p} label={p.replace("/lokaler/", "").replace(".jpg", "")}>
-                <Image src={p} alt="" fill sizes="200px" className="object-cover" />
+            {library.map((m) => (
+              <CoverOption key={m.id} value={m.url} checked={cover === m.url} label={m.name}>
+                <Image src={m.url} alt="" fill sizes="200px" className="object-cover" />
               </CoverOption>
             ))}
           </div>

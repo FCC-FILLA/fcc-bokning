@@ -191,3 +191,19 @@ export async function duplicateEvent(eventId: string, fd: FormData) {
   revalidatePath("/", "layout");
   redirect(`/evenemang/${copy.id}?kopierad=1`);
 }
+
+/** Flyttar ett evenemang upp eller ned i optionskön och numrerar om hela kön (1:a, 2:a …). */
+export async function moveOption(eventId: string, targetId: string, dir: "upp" | "ned") {
+  await requireBooker();
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("option_queue", { p_event: eventId });
+  const ids = ((data ?? []) as { event_id: string }[]).map((x) => x.event_id);
+  const i = ids.indexOf(targetId);
+  const j = dir === "upp" ? i - 1 : i + 1;
+  if (i >= 0 && j >= 0 && j < ids.length) {
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    for (const [n, id] of ids.entries()) await supabase.from("events").update({ option_rank: n + 1 }).eq("id", id);
+  }
+  revalidatePath("/", "layout");
+  redirect(`/evenemang/${eventId}#optioner`);
+}

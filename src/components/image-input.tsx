@@ -5,7 +5,8 @@ import { useRef, useState } from "react";
 const MAX = 1600;
 
 /** Filväljare för bilder. Skalar ner till max 1600 px och JPEG i webbläsaren innan formuläret skickas. */
-export function ImageInput({ name, label }: { name: string; label: string }) {
+export function ImageInput({ name, label, id }: { name: string; label: string; id?: string }) {
+  const inputId = id ?? `${name}-file`;
   const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,8 +45,8 @@ export function ImageInput({ name, label }: { name: string; label: string }) {
 
   return (
     <div className="grid gap-2">
-      <label className="label" htmlFor={`${name}-file`}>{label}</label>
-      <input ref={input} id={`${name}-file`} name={name} type="file" accept="image/jpeg,image/png,image/webp" className="text-sm" onChange={onChange} />
+      <label className="label" htmlFor={inputId}>{label}</label>
+      <input ref={input} id={inputId} name={name} type="file" accept="image/jpeg,image/png,image/webp" className="text-sm" onChange={onChange} />
       {busy && <p className="text-sm text-muted">Förbereder bilden …</p>}
       {error && <p className="text-sm text-warn">{error}</p>}
       {preview && (

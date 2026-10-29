@@ -59,6 +59,8 @@ const SETTINGS: Section = {
     { href: "/installningar", label: "Översikt" },
     { href: "/lokaler", label: "Lokaler" },
     { href: "/prislista", label: "Prislista" },
+    { href: "/installningar/evenemangstyper", label: "Evenemangstyper" },
+    { href: "/installningar/bilder", label: "Bilder" },
     { href: "/installningar/offert", label: "Offert" },
     { href: "/installningar/foretag", label: "Företagsuppgifter" },
     { href: "/installningar/epost", label: "E-post" },

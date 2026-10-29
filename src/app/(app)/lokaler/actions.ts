@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isAdmin, requireProfile } from "@/lib/auth";
-import { isFccPhoto, removeUploaded, uploadImage } from "@/lib/bilder";
+import { inLibrary, removeUploaded, uploadImage } from "@/lib/bilder";
 import { createClient } from "@/lib/supabase/server";
 
 const BUCKET = "lokaler";
@@ -129,7 +129,7 @@ export async function addRoomImage(id: string, fd: FormData) {
     url = up.url!;
   } else {
     const choice = String(fd.get("photo") ?? "");
-    if (isFccPhoto(choice)) url = choice;
+    if (await inLibrary(supabase, choice)) url = choice;
   }
   if (!url) fail(path, "Välj en bild att lägga till.");
   if (list.includes(url!)) fail(path, "Bilden finns redan på lokalen.");

@@ -28,8 +28,9 @@ export default async function ConflictsPage() {
       <div className="grid gap-1">
         <h1 className="text-2xl font-semibold">Krockar</h1>
         <p className="text-sm text-muted max-w-2xl">
-          Kommande bokningar där samma lokal, eller en sal och en del av den, är bokad samtidigt. Avbokade och genomförda
-          evenemang räknas inte.
+          Kommande bokningar där samma lokal, eller en sal och en del av den, är bokad samtidigt och minst ett av evenemangen är bekräftat.
+          Förfrågningar och preliminära som ligger på samma tid räknas inte som krockar; de står i optionskö på evenemanget. Avbokade och
+          genomförda evenemang räknas inte.
         </p>
       </div>
       {conflicts.length === 0 ? (
