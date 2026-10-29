@@ -1,3 +1,4 @@
+import { deliverNotifications } from "@/lib/notiser";
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -45,6 +46,7 @@ async function check(token: string, item: string, done: boolean, fd: FormData) {
   "use server";
   const supabase = await createClient();
   const { data } = await supabase.rpc("event_portal_check", { p_token: token, p_item: item, p_done: done, p_name: String(fd.get("name") ?? "").slice(0, 80) });
+  deliverNotifications();
   redirect(`/event/${token}?${data === "ok" ? "bockad=1" : "fel=1"}#checklista`);
 }
 

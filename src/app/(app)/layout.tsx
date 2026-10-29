@@ -5,6 +5,7 @@ import { isAdmin, isStaffOnly, requireProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { ROLE_LABEL } from "@/lib/types";
 import { Nav, SubNav } from "@/components/nav";
+import { deliverNotifications } from "@/lib/notiser";
 
 async function signOut() {
   "use server";
@@ -30,10 +31,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
   }
   const supabase = await createClient();
-  const { data: conflicts } = await supabase
-    .from("booking_conflicts")
-    .select("booking_id, other_booking_id")
-    .gte("ends_at", new Date().toISOString());
+  const [{ data: conflicts }, { count: unread }] = await Promise.all([
+    supabase.from("booking_conflicts").select("booking_id, other_booking_id").gte("ends_at", new Date().toISOString()),
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("profile_id", profile.id).is("read_at", null),
+  ]);
+  deliverNotifications();
   // Varje krock syns två gånger (A–B och B–A).
   const conflictCount = Math.round((conflicts?.length ?? 0) / 2);
 
@@ -55,6 +57,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               />
             </form>
             <div className="ml-auto flex items-center gap-3 text-sm">
+              <Link
+                href="/notiser"
+                className="relative grid size-8 place-items-center rounded-full hover:bg-white/15"
+                aria-label={unread ? `Notiser, ${unread} olästa` : "Notiser"}
+              >
+                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                </svg>
+                {!!unread && (
+                  <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-white px-1 text-[10px] font-bold leading-4 text-brand">
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+              </Link>
               <Link href="/konto" className="opacity-85 hover:opacity-100 hover:underline underline-offset-2">
                 {profile.full_name || profile.email} · {ROLE_LABEL[profile.role]}
               </Link>

@@ -1,5 +1,6 @@
 "use server";
 
+import { deliverNotifications } from "@/lib/notiser";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { localToIso } from "@/lib/datum";
@@ -25,6 +26,7 @@ export async function respond(token: string, shiftId: string, accept: boolean) {
   if (!valid(token, shiftId)) redirect("/");
   const supabase = await createClient();
   const { data } = await supabase.rpc("link_respond", { p_token: token, p_shift: shiftId, p_accept: accept });
+  deliverNotifications();
   if (data === "ok") await kickMail();
   revalidatePath(`/pass/${token}`);
   redirect(`/pass/${token}?${data === "ok" ? (accept ? "ja=1" : "nej=1") : `fel=${encodeURIComponent(MSG[String(data)] ?? "Något gick fel.")}`}`);
@@ -50,6 +52,7 @@ export async function reportTime(token: string, shiftId: string, fd: FormData) {
     p_break: Math.max(0, Math.round(Number(fd.get("break") ?? 0)) || 0),
     p_comment: String(fd.get("comment") ?? ""),
   });
+  deliverNotifications();
   revalidatePath(`/pass/${token}`);
   redirect(`/pass/${token}?${data === "ok" ? "tid=1" : `fel=${encodeURIComponent(MSG[String(data)] ?? "Något gick fel.")}`}#pass-${shiftId}`);
 }

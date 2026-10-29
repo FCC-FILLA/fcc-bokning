@@ -725,3 +725,51 @@ describe("optioner i turordning", () => {
     expect(c2.rows.length).toBeGreaterThan(0);
   });
 });
+
+describe("notiser", () => {
+  it("kundens svar på offerten och personalens ja ger notiser, men inte planerarens egna ändringar", async () => {
+    const q = await db.query<{ id: string; share_token: string }>(
+      "insert into quotes (title, status, salesperson_id) values ('Notistest', 'skickad', $1) returning id, share_token",
+      [ADMIN],
+    );
+    await db.query("update profiles set notify_kinds = '{offert,pass,tid,checklista}' where id = $1", [ADMIN]);
+    await db.exec("set role anon");
+    try {
+      await db.query("select respond_to_quote($1, true, 'Kim Kund', 'kim@kund.se', '')", [q.rows[0].share_token]);
+    } finally {
+      await db.exec("reset role");
+    }
+    const n = await db.query<{ title: string; profile_id: string }>("select title, profile_id from notifications where kind = 'offert'");
+    expect(n.rows.map((r) => r.title)).toContain(`Offert ${(await db.query<{ number: number }>("select number from quotes where id = $1", [q.rows[0].id])).rows[0].number} accepterad`);
+    expect(n.rows.every((r) => r.profile_id === ADMIN)).toBe(true);
+
+    const before = (await db.query<{ n: number }>("select count(*)::int n from notifications where kind = 'pass'")).rows[0].n;
+    // Planeraren tilldelar själv: ingen notis.
+    const sh = await db.query<{ id: string }>(
+      "insert into shifts (function_id, starts_at, ends_at, staff_kind) values ((select id from staff_functions where name = 'Kiosk'), '2027-10-01T10:00+02', '2027-10-01T14:00+02', 'frilans') returning id",
+    );
+    const st = await db.query<{ id: string; link_token: string }>("insert into staff (kind, name, email) values ('frilans', 'Frida Frilans', 'frida@x.se') returning id, link_token");
+    await asUser(ADMIN, () => db.query("insert into shift_assignments (shift_id, staff_id, status) values ($1, $2, 'inbjuden')", [sh.rows[0].id, st.rows[0].id]));
+    expect((await db.query<{ n: number }>("select count(*)::int n from notifications where kind = 'pass'")).rows[0].n).toBe(before);
+    // Frilansaren tackar ja via sin länk: notis.
+    await db.exec("set role anon");
+    try {
+      await db.query("select link_respond($1, $2, true)", [st.rows[0].link_token, sh.rows[0].id]);
+    } finally {
+      await db.exec("reset role");
+    }
+    const p = await db.query<{ title: string }>("select title from notifications where kind = 'pass' order by created_at desc limit 1");
+    expect(p.rows[0].title).toBe("Frida Frilans tackade ja");
+
+    // Hämtning av appnotiser kräver rätt nyckel.
+    await db.query("insert into app_secrets values ('push_claim', 'hemligt')");
+    await db.exec("set role anon");
+    try {
+      expect((await db.query("select * from claim_pushes('fel')")).rows).toHaveLength(0);
+      await db.query("select * from claim_pushes('hemligt')");
+    } finally {
+      await db.exec("reset role");
+    }
+    expect((await db.query<{ n: number }>("select count(*)::int n from notifications where pushed_at is null")).rows[0].n).toBe(0);
+  });
+});

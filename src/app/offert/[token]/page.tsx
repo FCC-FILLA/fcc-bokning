@@ -1,3 +1,4 @@
+import { deliverNotifications } from "@/lib/notiser";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { loadPublicDoc } from "@/lib/offert-doc";
@@ -23,6 +24,7 @@ async function respond(token: string, fd: FormData) {
     p_email: String(fd.get("email") ?? ""),
     p_comment: String(fd.get("comment") ?? ""),
   });
+  deliverNotifications();
   redirect(`/offert/${token}?svar=${data ?? "fel"}#svara`);
 }
 

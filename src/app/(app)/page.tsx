@@ -119,7 +119,24 @@ export default async function DashboardPage() {
   const oldInquiries = ((inquiryData ?? []) as { id: string; title: string; created_at: string; company_name: string | null }[]).filter(
     (e) => e.created_at < weekAgo,
   );
-  const actionCount = conflicts.length + options.length + expiredSent.length + oldInquiries.length;
+  // Kommande pass (två veckor) där inte alla platser är tillsatta.
+  const { data: shiftData } = await supabase
+    .from("shifts")
+    .select("id, starts_at, ends_at, needed, staff_kind, staff_functions(name, color), events(id, title), shift_assignments(status)")
+    .neq("status", "utkast")
+    .gt("ends_at", nowIso)
+    .lt("starts_at", dayStartIso(horizon))
+    .order("starts_at");
+  type GapShift = {
+    id: string; starts_at: string; ends_at: string; needed: number; staff_kind: string;
+    staff_functions: { name: string; color: string } | null; events: { id: string; title: string } | null;
+    shift_assignments: { status: string }[];
+  };
+  const understaffed = ((shiftData ?? []) as unknown as GapShift[])
+    .map((x) => ({ ...x, filled: x.shift_assignments.filter((a) => a.status === "tilldelad").length, pending: x.shift_assignments.filter((a) => a.status === "inbjuden" || a.status === "ansokt").length }))
+    .filter((x) => x.filled < x.needed);
+  const missingPeople = understaffed.reduce((n, x) => n + x.needed - x.filled, 0);
+  const actionCount = conflicts.length + options.length + expiredSent.length + oldInquiries.length + understaffed.length;
 
   // Beläggning: huvudsalarna kommande 14 dagar. En sal räknas som bokad om den eller någon del av den är bokad.
   // Salar på översta nivån med yta (kök och kontrollrum utelämnas).
@@ -217,7 +234,7 @@ export default async function DashboardPage() {
         {/* Att göra */}
         <section id="att-gora" className="card p-5 grid gap-4 scroll-mt-20">
           <h2 className="text-lg font-semibold">Kräver åtgärd</h2>
-          {actionCount === 0 && <p className="text-sm text-muted">Inga krockar, utgående optioner eller obesvarade förfrågningar.</p>}
+          {actionCount === 0 && <p className="text-sm text-muted">Inga krockar, utgående optioner, obesvarade förfrågningar eller pass utan personal.</p>}
 
           {conflicts.length > 0 && (
             <Todo title={`Krockar (${conflicts.length})`} href="/krockar">
@@ -227,6 +244,21 @@ export default async function DashboardPage() {
                   {" och "}
                   <Link className="font-semibold hover:underline" href={`/evenemang/${c.other_event_id}`}>{c.other_event_title}</Link>
                   <span className="block text-muted">{c.room_name} / {c.other_room_name}, {fmtDate(c.starts_at)}</span>
+                </li>
+              ))}
+            </Todo>
+          )}
+
+          {understaffed.length > 0 && (
+            <Todo title={`Pass som saknar personal (${understaffed.length} pass, ${missingPeople} ${missingPeople === 1 ? "person" : "personer"})`} href="/personal">
+              {understaffed.slice(0, 6).map((x) => (
+                <li key={x.id} className="border-l-4 pl-2" style={{ borderLeftColor: x.staff_functions?.color ?? "var(--color-line)" }}>
+                  <Link className="font-semibold hover:underline" href={`/personal/pass/${x.id}`}>
+                    {x.staff_functions?.name ?? "Pass"} · {fmtDate(x.starts_at)} {fmtTime(x.starts_at)}–{fmtTime(x.ends_at)}
+                  </Link>
+                  <span className="block text-muted">
+                    {x.filled} av {x.needed} tillsatta{x.pending ? `, ${x.pending} väntar på svar` : ""}{x.events ? ` · ${x.events.title}` : ""}
+                  </span>
                 </li>
               ))}
             </Todo>
