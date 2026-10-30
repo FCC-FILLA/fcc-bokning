@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadCompany } from "@/lib/foretag";
 import { ROLE_LABEL } from "@/lib/types";
 import { ArticleIcon } from "@/components/icon";
+import { CopyButton } from "@/components/copy-button";
 
 export const metadata = { title: "Inställningar" };
 
@@ -24,6 +25,9 @@ export default async function SettingsPage() {
     count(supabase.from("profiles").select("id", { count: "exact", head: true }).eq("active", false)),
     count(supabase.from("calendar_tokens").select("user_id", { count: "exact", head: true }).eq("user_id", profile.id)),
   ]);
+
+  const { data: siteRow } = await supabase.from("app_settings").select("value").eq("key", "site_url").maybeSingle();
+  const site = siteRow?.value || "https://fcc-bokning.vercel.app";
 
   const cards: Card[] = [
     {
@@ -67,6 +71,13 @@ export default async function SettingsPage() {
       text: "Namn, adress, organisationsnummer och kontaktuppgifter som visas i offerter och PDF:er.",
       icon: "document",
       facts: company.orgnr ? [company.legal_name] : ["organisationsnummer saknas"],
+    },
+    {
+      href: "/installningar/skarm",
+      title: "Kontorsskärm",
+      text: "Länk till en helskärmsvy med dagens och veckans evenemang, för en TV på kontoret.",
+      icon: "clock",
+      facts: [],
     },
     {
       href: "/anvandare",
@@ -113,6 +124,18 @@ export default async function SettingsPage() {
             </li>
           ))}
       </ul>
+      <section className="card p-5 grid gap-3">
+        <h2 className="text-lg font-semibold">Förfrågningsformulär för hemsidan</h2>
+        <p className="text-sm text-muted">
+          Kunder fyller i datum, gäster och typ. Det blir ett evenemang med status Förfrågan med lediga lokaler föreslagna, bokarna får en notis och kunden ett kvitto.
+          Länka till sidan eller bädda in den på hemsidan.
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <a className="btn" href="/forfragan" target="_blank" rel="noreferrer">Öppna formuläret</a>
+          <CopyButton text={`${site}/forfragan`} label="Kopiera länk" />
+          <CopyButton text={`<iframe src="${site}/forfragan?inbaddad=1" style="width:100%;min-height:1100px;border:0" title="Förfrågan"></iframe>`} label="Kopiera inbäddningskod" />
+        </div>
+      </section>
     </div>
   );
 }

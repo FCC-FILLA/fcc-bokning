@@ -36,7 +36,7 @@ export type Room = {
   sort_order: number;
 };
 
-export type Setup = { id: string; name: string; sort_order: number };
+export type Setup = { id: string; name: string; sort_order: number; changeover_minutes?: number };
 export type RoomCapacity = { room_id: string; setup_id: string; capacity: number };
 
 export type Company = {
@@ -81,6 +81,11 @@ export type EventRow = {
   responsible_id: string | null;
   participants: number | null;
   option_expires_on: string | null;
+  option_token?: string;
+  option_reminded_at?: string | null;
+  customer_response?: "vill_boka" | "slapper" | null;
+  customer_response_at?: string | null;
+  customer_response_name?: string | null;
   description: string | null;
   technical_info: string | null;
   hospitality_info: string | null;
@@ -107,6 +112,18 @@ export type Booking = {
   ends_at: string;
   setup_id: string | null;
   note: string | null;
+  phase?: string | null;
+  rig_minutes?: number;
+  strike_minutes?: number;
+};
+
+/** Två bokningar i samma lokal med för kort tid emellan (riv + omställning + rigg). */
+export type ChangeoverWarning = {
+  booking_id: string; event_id: string; event_title: string; event_status: EventStatus; room_name: string;
+  starts_at: string; ends_at: string; strike_minutes: number; setup_id: string | null; setup_name: string | null;
+  next_booking_id: string; next_event_id: string; next_event_title: string; next_event_status: EventStatus; next_room_name: string;
+  next_starts_at: string; next_ends_at: string; next_rig_minutes: number; next_setup_id: string | null; next_setup_name: string | null;
+  gap_minutes: number; needed_minutes: number; changeover_minutes: number;
 };
 
 export type BookingConflict = {

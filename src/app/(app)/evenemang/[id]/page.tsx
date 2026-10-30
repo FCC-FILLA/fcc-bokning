@@ -1,26 +1,31 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canBook, requireProfile } from "@/lib/auth";
-import { addDays, dayLong, fmtDate, fmtDayMonth, fmtRange, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
+import { addDays, dayLong, fmtDate, fmtDayMonth, fmtMinutes, fmtRange, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
+import { RIG_OPTIONS, rigLabel, withRig } from "@/lib/rigg";
 import { daysBetween, optionOrdinal as ordinal } from "@/lib/bokning";
 import { depthOf } from "@/lib/lokaler";
 import { getLookups } from "@/lib/lookups";
 import { QUOTE_STATUS_LABEL, fmtKr, type QuoteStatus } from "@/lib/offert";
 import { createClient } from "@/lib/supabase/server";
-import type { Booking, BookingConflict, EventRow } from "@/lib/types";
+import type { Booking, BookingConflict, ChangeoverWarning, EventRow } from "@/lib/types";
 import { BookingFields } from "@/components/booking-fields";
 import { ConfirmButton } from "@/components/confirm-button";
+import { CopyButton } from "@/components/copy-button";
 import { EventFields } from "@/components/event-fields";
 import { History } from "@/components/history";
 import { StatusPill } from "@/components/status-pill";
 import { EventStaffing } from "@/components/event-staffing";
 import { EventPortalAdmin } from "@/components/event-portal-admin";
 import { EventLayouts } from "@/components/event-layouts";
+import { EventRunSheet } from "@/components/event-run-sheet";
 import { EventTabs } from "@/components/event-tabs";
 import { EventInvoicing } from "@/components/event-invoicing";
+import { BookingMatrix, BookingSeriesList, PROGRAM_VIEWS, ProgramSummary, ProgramViewSwitch, type ProgramView } from "@/components/event-program";
+import { PHASES, PHASE_LABEL, isPhase } from "@/lib/serier";
 import { saveEventAsTemplate } from "../../mallar/actions";
 import {
-  addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, moveOption, updateBooking, updateEvent,
+  addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, moveOption, sendOptionReminder, updateBooking, updateEvent,
 } from "../actions";
 
 type QueueRow = { event_id: string; title: string; status: EventRow["status"]; company_name: string | null; option_expires_on: string | null; place: number };
@@ -32,7 +37,7 @@ export default async function EventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string; vy?: string; borttaget?: string; optionskickad?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -48,6 +53,11 @@ export default async function EventPage({
     getLookups(),
   ]);
   const { data: queueData } = await supabase.rpc("option_queue", { p_event: id });
+  // För kort omställning före eller efter någon av evenemangets bokningar.
+  const { data: coData } = await supabase.from("changeover_warnings").select("*").or(`event_id.eq.${id},next_event_id.eq.${id}`);
+  const changeovers = (coData ?? []) as ChangeoverWarning[];
+  const { data: siteRow } = await supabase.from("app_settings").select("value").eq("key", "site_url").maybeSingle();
+  const site = siteRow?.value || "https://fcc-bokning.vercel.app";
   const queue = (queueData ?? []) as QueueRow[];
   const myPlace = queue.find((x) => x.event_id === id)?.place;
   if (!event) notFound();
@@ -56,6 +66,7 @@ export default async function EventPage({
 
   const now = new Date().toISOString();
   const allBookings = (bookingData ?? []) as Booking[];
+  const view: ProgramView = PROGRAM_VIEWS.some((v) => v.id === sp.vy) ? (sp.vy as ProgramView) : "matris";
   const showPast = sp.tidigare === "1";
   const pastCount = allBookings.filter((b) => b.ends_at < now).length;
   const bookings = showPast ? allBookings : allBookings.filter((b) => b.ends_at >= now);
@@ -95,13 +106,33 @@ export default async function EventPage({
           {company && <Link className="text-sm text-muted hover:underline" href={`/kunder/${company.id}`}>{company.name}</Link>}
         </div>
         {ev.status === "preliminar" && ev.option_expires_on && (
-          <p className="text-sm text-st-preliminar">Optionen gäller till {fmtDate(ev.option_expires_on)}.</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span className="text-st-preliminar">Optionen gäller till {fmtDate(ev.option_expires_on)}.</span>
+            {ev.customer_response === "vill_boka" ? (
+              <span className="rounded-full bg-st-genomford-soft px-2 py-0.5 text-xs font-semibold text-ok">
+                Kunden vill boka{ev.customer_response_name ? ` (${ev.customer_response_name})` : ""}{ev.customer_response_at ? `, ${fmtDate(ev.customer_response_at)}` : ""}
+              </span>
+            ) : ev.option_reminded_at ? (
+              <span className="text-muted">Påminnelse skickad {fmtDate(ev.option_reminded_at)}, inget svar ännu.</span>
+            ) : (
+              <span className="text-muted">Kunden får en påminnelse automatiskt några dagar före.</span>
+            )}
+            {booker && ev.customer_response !== "vill_boka" && (
+              <form action={sendOptionReminder.bind(null, id)}>
+                <ConfirmButton label={ev.option_reminded_at ? "Skicka igen" : "Skicka nu"} question="Mejla kunden en länk där de kan bekräfta eller släppa optionen?" confirmLabel="Skicka" className="btn btn-ghost text-sm px-2" />
+              </form>
+            )}
+            {ev.option_token && <CopyButton text={`${site}/option/${ev.option_token}`} label="Kopiera optionslänk" />}
+          </div>
         )}
+        {ev.customer_response === "slapper" && <p className="text-sm text-muted">Kunden släppte optionen{ev.customer_response_at ? ` ${fmtDate(ev.customer_response_at)}` : ""}.</p>}
+        {sp.optionskickad && <p className="text-sm text-ok">Mejlet till kunden ligger i kön.</p>}
       </div>
 
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
       {sp.sparat && <Ok>Evenemanget är sparat.</Ok>}
-      {sp.andrat && <Ok>Bokningen är ändrad.</Ok>}
+      {sp.andrat && <Ok>{sp.andrat === "1" ? "Bokningen är ändrad." : `${sp.andrat} bokningar är ändrade.`}</Ok>}
+      {sp.borttaget && <Ok>{sp.borttaget} bokning{sp.borttaget === "1" ? "" : "ar"} har tagits bort.</Ok>}
       {sp.kopierad && <Ok>Kopian är skapad med status Förfrågan. Byt gärna namn och kontrollera tiderna.</Ok>}
       {sp.franmall && <Ok>Evenemanget är skapat från mallen. Kontrollera krockar, kund och tider.</Ok>}
       {sp.tillagt && <Ok>{sp.tillagt} bokning{sp.tillagt === "1" ? "" : "ar"} har lagts till.</Ok>}
@@ -196,14 +227,21 @@ export default async function EventPage({
                   <h2 className="text-lg font-semibold">Bokningar</h2>
                   <span className="text-sm text-muted">{allBookings.length} totalt</span>
                   <span className="flex-1" />
-                  {pastCount > 0 && (
-                    <Link className="text-sm text-muted underline-offset-2 hover:underline" href={`/evenemang/${id}${showPast ? "" : "?tidigare=1"}#bokningar`}>
+                  {allBookings.length > 0 && <ProgramViewSwitch eventId={id} view={view} />}
+                  {view === "lista" && pastCount > 0 && (
+                    <Link className="text-sm text-muted underline-offset-2 hover:underline" href={`/evenemang/${id}?vy=lista${showPast ? "" : "&tidigare=1"}#bokningar`}>
                       {showPast ? "Dölj tidigare" : `Visa tidigare (${pastCount})`}
                     </Link>
                   )}
                 </div>
 
-                {bookings.length === 0 ? (
+                {allBookings.length > 0 && <ProgramSummary bookings={allBookings} conflicts={conflicts} />}
+
+                {view === "matris" && allBookings.length > 0 ? (
+                  <BookingMatrix eventId={id} bookings={allBookings} conflicts={conflicts} lookups={lookups} />
+                ) : view === "serier" && allBookings.length > 0 ? (
+                  <BookingSeriesList eventId={id} bookings={allBookings} conflicts={conflicts} lookups={lookups} booker={booker} />
+                ) : bookings.length === 0 ? (
                   <p className="text-sm text-muted">Inga {pastCount ? "kommande " : ""}bokningar. Lägg till lokaler och tider nedan.</p>
                 ) : (
                   <div className="grid gap-4">
@@ -229,23 +267,33 @@ export default async function EventPage({
                         <ul className="grid">
                           {list.map((b) => {
                             const cs = conflictsFor(b.id);
+                            const coBefore = changeovers.filter((c) => c.next_booking_id === b.id);
+                            const coAfter = changeovers.filter((c) => c.booking_id === b.id);
                             const cap = capacity(b.room_id, b.setup_id);
                             const over = cap != null && ev.participants != null && ev.participants > cap;
                             const multiDay = isoToDate(b.ends_at) !== day;
                             return (
-                              <li key={b.id} className={`relative grid gap-1 rounded-md px-2 py-2 ${cs.length ? "bg-warn-soft/60" : "hover:bg-sunk/50"}`}>
+                              <li key={b.id} id={`b-${b.id}`} className={`relative grid gap-1 rounded-md px-2 py-2 scroll-mt-28 target:ring-2 target:ring-brand ${cs.length ? "bg-warn-soft/60" : "hover:bg-sunk/50"}`}>
                                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                                   <span className="font-mono text-sm w-28 shrink-0">
                                     {fmtTime(b.starts_at)}–{fmtTime(b.ends_at)}
                                     {multiDay && <span className="text-xs text-muted"> +{daysBetween(day, isoToDate(b.ends_at))}d</span>}
                                   </span>
                                   <span className="font-semibold min-w-0">{roomName.get(b.room_id) ?? "Okänd lokal"}</span>
+                                  {isPhase(b.phase) && b.phase !== "genomforande" && <span className={`pill ph-${b.phase}`}>{PHASE_LABEL[b.phase]}</span>}
                                   {b.setup_id && (
                                     <span className={`text-sm ${over ? "text-warn" : "text-muted"}`}>
                                       {setupName.get(b.setup_id)}{cap != null ? `, max ${cap}` : ""}{over ? ` (${ev.participants} deltagare)` : ""}
                                     </span>
                                   )}
                                   {b.note && <span className="text-sm text-muted">{b.note}</span>}
+                                  {(b.rig_minutes || b.strike_minutes) ? (
+                                    <span className="text-xs text-muted">
+                                      {b.rig_minutes ? `rigg från ${fmtTime(withRig(b).from)}` : ""}
+                                      {b.rig_minutes && b.strike_minutes ? " · " : ""}
+                                      {b.strike_minutes ? `riv till ${fmtTime(withRig(b).to)}` : ""}
+                                    </span>
+                                  ) : null}
                                   <span className="flex-1" />
                                   {booker && (
                                     <span className="flex items-center gap-1">
@@ -273,6 +321,12 @@ export default async function EventPage({
                                               <input className="input" id={`e-${b.id}`} name="ends_at" type="datetime-local" step={900} defaultValue={isoToLocal(b.ends_at)} required />
                                             </div>
                                             <div className="field">
+                                              <label className="label" htmlFor={`ph-${b.id}`}>Fas</label>
+                                              <select className="input" id={`ph-${b.id}`} name="phase" defaultValue={isPhase(b.phase) ? b.phase : "genomforande"}>
+                                                {PHASES.map((p) => <option key={p} value={p}>{PHASE_LABEL[p]}</option>)}
+                                              </select>
+                                            </div>
+                                            <div className="field">
                                               <label className="label" htmlFor={`setup-${b.id}`}>Möblering</label>
                                               <select className="input" id={`setup-${b.id}`} name="setup_id" defaultValue={b.setup_id ?? ""}>
                                                 <option value="">Ej bestämt</option>
@@ -282,6 +336,18 @@ export default async function EventPage({
                                             <div className="field">
                                               <label className="label" htmlFor={`note-${b.id}`}>Notering</label>
                                               <input className="input" id={`note-${b.id}`} name="note" defaultValue={b.note ?? ""} />
+                                            </div>
+                                            <div className="field">
+                                              <label className="label" htmlFor={`rig-${b.id}`}>Rigg före start</label>
+                                              <select className="input" id={`rig-${b.id}`} name="rig_minutes" defaultValue={b.rig_minutes ?? 0}>
+                                                {RIG_OPTIONS.map((m) => <option key={m} value={m}>{rigLabel(m)}</option>)}
+                                              </select>
+                                            </div>
+                                            <div className="field">
+                                              <label className="label" htmlFor={`strike-${b.id}`}>Riv efter slut</label>
+                                              <select className="input" id={`strike-${b.id}`} name="strike_minutes" defaultValue={b.strike_minutes ?? 0}>
+                                                {RIG_OPTIONS.map((m) => <option key={m} value={m}>{rigLabel(m)}</option>)}
+                                              </select>
                                             </div>
                                           </div>
                                           <div><button className="btn btn-primary" type="submit">Spara</button></div>
@@ -293,6 +359,15 @@ export default async function EventPage({
                                     </span>
                                   )}
                                 </div>
+                                {[...coBefore.map((c) => ({ c, other: c.event_id === id ? null : { id: c.event_id, title: c.event_title }, dir: "före" })),
+                                  ...coAfter.map((c) => ({ c, other: c.next_event_id === id ? null : { id: c.next_event_id, title: c.next_event_title }, dir: "efter" }))].map(({ c, other, dir }) => (
+                                  <span key={`${c.booking_id}-${c.next_booking_id}-${dir}`} className="text-xs text-st-preliminar pl-0 sm:pl-32">
+                                    Kort omställning {dir}
+                                    {other ? <> (<Link className="underline" href={`/evenemang/${other.id}`}>{other.title}</Link>)</> : ""}:{" "}
+                                    {fmtMinutes(c.gap_minutes)} emellan, behövs {fmtMinutes(c.needed_minutes)}
+                                    {c.setup_name || c.next_setup_name ? ` (${c.setup_name ?? "okänd"} → ${c.next_setup_name ?? "okänd"})` : ""}
+                                  </span>
+                                ))}
                                 {cs.map((c) => (
                                   <span key={c.other_booking_id} className="text-xs text-warn pl-0 sm:pl-32">
                                     Krockar med <Link className="underline" href={`/evenemang/${c.other_event_id}`}>{c.other_event_title}</Link> i{" "}
@@ -313,6 +388,12 @@ export default async function EventPage({
                     <summary className="cursor-pointer font-semibold">Lägg till bokningar</summary>
                     <form action={addBookings.bind(null, id)} className="mt-4 grid gap-4">
                       <BookingFields lookups={lookups} defaultDate={firstDate ?? undefined} />
+                      <div className="field max-w-xs">
+                        <label className="label" htmlFor="add-phase">Fas för raderna</label>
+                        <select className="input" id="add-phase" name="phase" defaultValue="genomforande">
+                          {PHASES.map((p) => <option key={p} value={p}>{PHASE_LABEL[p]}</option>)}
+                        </select>
+                      </div>
                       <div><button className="btn btn-primary" type="submit">Lägg till</button></div>
                     </form>
                   </details>
@@ -322,6 +403,7 @@ export default async function EventPage({
           ),
           genomforande: (
             <>
+              <EventRunSheet eventId={id} />
               <EventLayouts eventId={id} />
               <EventPortalAdmin eventId={id} sent={sp.skickad} />
             </>

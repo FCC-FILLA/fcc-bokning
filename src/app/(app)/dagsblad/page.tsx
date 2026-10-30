@@ -1,3 +1,4 @@
+import { withRig } from "@/lib/rigg";
 import Link from "next/link";
 import { addDays, dayLong, dayStartIso, fmtDayMonth, fmtTime, isoToDate, todayDate } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
@@ -13,6 +14,8 @@ type Row = {
   ends_at: string;
   setup_id: string | null;
   note: string | null;
+  rig_minutes: number;
+  strike_minutes: number;
   event_id: string;
   rooms: { name: string } | null;
   setups: { name: string } | null;
@@ -32,7 +35,7 @@ export default async function DaySheetPage({ searchParams }: { searchParams: Pro
   const { data } = await supabase
     .from("bookings")
     .select(
-      "id, room_id, starts_at, ends_at, setup_id, note, event_id, rooms(name), setups(name), events!inner(*, companies(name), contacts(name, phone, email), profiles!events_responsible_id_fkey(full_name))",
+      "id, room_id, starts_at, ends_at, setup_id, note, rig_minutes, strike_minutes, event_id, rooms(name), setups(name), events!inner(*, companies(name), contacts(name, phone, email), profiles!events_responsible_id_fkey(full_name))",
     )
     .in("events.status", statuses)
     .lt("starts_at", dayStartIso(addDays(date, 1)))
@@ -101,7 +104,15 @@ export default async function DaySheetPage({ searchParams }: { searchParams: Pro
                   <td className="pl-0 font-mono whitespace-nowrap">{t(s.starts_at, "start")}–{t(s.ends_at, "end")}</td>
                   <td className="font-semibold">{s.rooms?.name}</td>
                   <td>{s.setups?.name ?? "–"}</td>
-                  <td>{s.note ?? ""}</td>
+                  <td>
+                    {s.note ?? ""}
+                    {(s.rig_minutes || s.strike_minutes) ? (
+                      <span className="block text-xs text-muted">
+                        {s.rig_minutes ? `Rigg från ${fmtTime(withRig(s).from)}` : ""}{s.rig_minutes && s.strike_minutes ? " · " : ""}
+                        {s.strike_minutes ? `riv till ${fmtTime(withRig(s).to)}` : ""}
+                      </span>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

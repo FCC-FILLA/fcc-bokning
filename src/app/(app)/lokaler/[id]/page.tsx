@@ -7,9 +7,11 @@ import { depthOf, roomImages } from "@/lib/lokaler";
 import { createClient } from "@/lib/supabase/server";
 import type { Room, RoomCapacity, Setup } from "@/lib/types";
 import { ImageInput } from "@/components/image-input";
-import { addRoomImage, changeRoomImage, updateRoom } from "../actions";
+import { addRoomImage, changeRoomImage, newRoomCardToken, saveRoomCard, updateRoom } from "../actions";
+import { qrSvg } from "@/lib/qr";
+import { ConfirmButton } from "@/components/confirm-button";
 
-type R = Room & { image_path: string | null; gallery: string[]; sales_text: string | null; name_en?: string | null; sales_text_en?: string | null };
+type R = Room & { card_token: string; card_info: string | null; safety_info: string | null; contact_info: string | null; blocked: boolean; blocked_reason: string | null; image_path: string | null; gallery: string[]; sales_text: string | null; name_en?: string | null; sales_text_en?: string | null };
 
 export default async function RoomPage({
   params,
@@ -45,6 +47,10 @@ export default async function RoomPage({
     for (const x of all) if (x.parent_id && descendants.has(x.parent_id) && !descendants.has(x.id)) { descendants.add(x.id); grew = true; }
   }
   const parents = all.filter((x) => !descendants.has(x.id) && x.active);
+  const { data: siteRow } = await supabase.from("app_settings").select("value").eq("key", "site_url").maybeSingle();
+  const cardUrl = `${siteRow?.value || "https://fcc-bokning.vercel.app"}/lokal/${room.card_token}`;
+  const qr = await qrSvg(cardUrl);
+  const { count: openIssues } = await supabase.from("room_issues").select("id", { count: "exact", head: true }).eq("room_id", id).neq("status", "klar");
 
   return (
     <div className="grid gap-5 max-w-5xl">
@@ -121,6 +127,44 @@ export default async function RoomPage({
 
         {admin && <div><button className="btn btn-primary" type="submit">Spara lokalen</button></div>}
       </form>
+
+      <section id="lokalkort" className="card p-5 grid gap-4 scroll-mt-28">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-lg font-semibold">Lokalkort och felanmälan</h2>
+          <span className="text-sm text-muted">QR-skylten i lokalen leder hit. Den som står i lokalen ser infon och kan felanmäla med foto.</span>
+        </div>
+        {room.blocked && <p className="rounded-lg bg-warn-soft px-4 py-2 text-sm text-warn">Lokalen är spärrad{room.blocked_reason ? `: ${room.blocked_reason}` : "."}</p>}
+        <div className="grid gap-5 md:grid-cols-[1fr_220px]">
+          <form action={saveRoomCard.bind(null, id)} className="grid gap-3">
+            <fieldset disabled={!admin} className="grid gap-3">
+              <div className="field"><label className="label" htmlFor="card_info">Ljus, ljud och el</label>
+                <textarea className="input min-h-20" id="card_info" name="card_info" defaultValue={room.card_info ?? ""} placeholder="Var finns strömbrytare, ljudbord, eluttag …" /></div>
+              <div className="field"><label className="label" htmlFor="safety_info">Säkerhet och nödutgångar</label>
+                <textarea className="input min-h-20" id="safety_info" name="safety_info" defaultValue={room.safety_info ?? ""} placeholder="Nödutgångar, brandsläckare, återsamlingsplats" /></div>
+              <div className="field"><label className="label" htmlFor="contact_info">Kontakt</label>
+                <textarea className="input min-h-16" id="contact_info" name="contact_info" defaultValue={room.contact_info ?? ""} placeholder="Vem man ringer vid problem, med telefonnummer" /></div>
+              <p className="text-xs text-muted">Sidan är öppen för alla som har QR-koden. Skriv inga koder eller annat som inte ska spridas.</p>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex items-center gap-2 text-sm pb-2"><input type="checkbox" name="blocked" defaultChecked={room.blocked} /> Spärra lokalen</label>
+                <div className="field grow"><label className="label" htmlFor="blocked_reason">Varför</label>
+                  <input className="input" id="blocked_reason" name="blocked_reason" defaultValue={room.blocked_reason ?? ""} placeholder="T.ex. vattenskada, renovering" /></div>
+              </div>
+            </fieldset>
+            {admin && <div><button className="btn btn-primary" type="submit">Spara lokalkortet</button></div>}
+          </form>
+          <div className="grid content-start gap-2 justify-items-center text-center">
+            <div className="w-48 [&_svg]:h-auto [&_svg]:w-full" dangerouslySetInnerHTML={{ __html: qr }} />
+            <a className="text-xs text-muted underline break-all" href={cardUrl} target="_blank" rel="noreferrer">Öppna lokalkortet</a>
+            <Link className="btn text-sm" href={`/lokaler/${id}/skylt`} target="_blank">Skriv ut skylt</Link>
+            <Link className="text-sm hover:underline" href={`/lokaler/fel?lokal=${id}`}>Felanmälningar{openIssues ? ` (${openIssues} öppna)` : ""}</Link>
+            {admin && (
+              <form action={newRoomCardToken.bind(null, id)}>
+                <ConfirmButton label="Ny QR-kod" question="Den gamla QR-koden slutar fungera. Fortsätta?" confirmLabel="Ja" className="btn btn-ghost text-xs" />
+              </form>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section id="bilder" className="card p-5 grid gap-4 scroll-mt-28">
         <div>

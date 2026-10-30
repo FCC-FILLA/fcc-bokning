@@ -1,6 +1,6 @@
 # Idéer och kommande arbete
 
-Saker som är bestämda men inte klara. Senast uppdaterad 2026-10-29.
+Saker som är bestämda men inte klara. Senast uppdaterad 2026-10-30.
 
 ## Byggt (2026-10-29)
 - Eventlänk för kunden: /event/<token>, öppen när evenemanget är bekräftat (eller tidigare om vi väljer det).
@@ -47,3 +47,19 @@ Byggt: Evenemang → Möbleringar (mallar per lokal), ritverktyg med möbelbibli
 grundritning per lokal (mått, pelare, dörrar, nödutgångar, fast scen), Möbler och inventarier under Inställningar, ritningarna på personalens pass.
 Nästa steg: riktiga planritningar som bakgrundsbild (skalas mot mått), bordsplacering med gästnamn (import från Excel), ställtid/personalbehov per
 ritning, visa ritningen i offert och på kundens eventsida, lagerkoll mot andra evenemang samma dag.
+
+## Byggt 2026-10-30 (de tio förslagen, gren funktioner-30-okt)
+- Omställning: rigg och riv per bokning (egna block i veckovyn, på dagsbladet), omställningstid per möblering och par
+  (Inställningar → Omställning), varning när tiden mellan bokningar i samma lokal är för kort (vecka, evenemang, Krockar, översikt).
+- Möbler per dag (Evenemang → Möbler per dag): ritningarnas behov över alla evenemang samma dag mot lagret, varning på evenemanget och översikten.
+- Körschema per evenemang (Genomförande): punkter för kund och/eller personal, personalfunktion markerar "din" punkt, flytta tider,
+  kopiera från annat evenemang, utskrift. Syns på eventlänken och på passen.
+- Tillgänglighet: personalen markerar när de inte kan jobba (portalen, länken); syns vid bemanning; inbjudningskedjan hoppar över upptagna.
+- Optionsbevakning: kunden mejlas några dagar före (option_reminder_days, kl 07:15) med länk /option/<token> för att bekräfta eller släppa.
+  Släpper kunden avbokas evenemanget och nästa i kön får besked. Notisslag "option".
+- Lokalkort: QR-skylt per lokal (/lokal/<token>), info om ljus/ljud/säkerhet/kontakt, felanmälan med foto (hink felanmalan),
+  Felanmälningar under Översikt, spärra lokal (syns i kalendern, utesluts i Ledig lokal).
+- Öppna och stänga huset (Personal → Öppna och stänga): checklistor som signeras i portalen eller på frilansarnas länk, avvikelser, logg.
+- Statistik (Försäljning → Statistik): beläggning per lokal och månad, offererat mot vunnet, kundkategorier, evenemangstyper, Excel.
+- Förfrågningsformulär (/forfragan, inbäddning med ?inbaddad=1): skapar förfrågan med kund, kontakt och föreslagna lediga lokaler.
+- event_portal och event_staff_info heter nu *_base och omsluts av nya funktioner som lägger till körschemat. Ändra *_base framöver.

@@ -6,8 +6,10 @@ import { fmtDate, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
 import { loadCompany } from "@/lib/foretag";
 import { ATTEST_LABEL, shiftHours, workedHours, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
-import { reportTime, respond, saveLinkDetails } from "./actions";
+import { addLinkUnavailability, checkLinkRoutine, signLinkRoutine, removeLinkUnavailability, reportTime, respond, saveLinkDetails } from "./actions";
 import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
+import { UnavailabilityForm, type Unavailable } from "@/components/unavailability";
+import { ROUTINE_MSG, Routines, type RoutineDoc } from "@/components/routines";
 
 export const metadata: Metadata = { title: "Mina pass", robots: { index: false, follow: false } };
 
@@ -40,7 +42,7 @@ export default async function LinkPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string; uppgifter?: string }>;
+  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string; uppgifter?: string; ledig?: string; huset?: string; signerad?: string; rutinfel?: string }>;
 }) {
   const { token } = await params;
   const sp = await searchParams;
@@ -51,6 +53,10 @@ export default async function LinkPage({
     loadCompany(supabase),
     supabase.rpc("link_details", { p_token: token }),
     supabase.rpc("link_staff_info", { p_token: token }),
+  ]);
+  const [{ data: unavail }, { data: routines }] = await Promise.all([
+    supabase.rpc("link_unavailability", { p_token: token }),
+    supabase.rpc("link_routines", { p_token: token }),
   ]);
   if (!data) notFound();
   const doc = data as { name: string; company: string | null; kind: "frilans" | "leverantor"; shifts: LinkShift[] };
@@ -78,7 +84,7 @@ export default async function LinkPage({
       </div>
       {(s.event || s.room) && <p className="text-sm text-muted">{[s.event, s.room].filter(Boolean).join(" · ")}</p>}
       {s.note && <p className="text-sm">{s.note}</p>}
-      {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/pass/${token}/fil/${id}`} />}
+      {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/pass/${token}/fil/${id}`} functionId={s.function} />}
       {s.status === "inbjuden" && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line pt-2">
           <form action={respond.bind(null, token, s.id, true)}><button className="btn btn-primary" type="submit">{supplier ? "Bekräfta bokningen" : "Ja, jag tar passet"}</button></form>
@@ -143,6 +149,29 @@ export default async function LinkPage({
           <details className="card p-4" open={!pending.length && !upcoming.length}>
             <summary className="cursor-pointer font-medium">Bra att veta</summary>
             <div className="mt-3"><StaffInfoBlocks blocks={(info ?? []) as StaffInfoBlock[]} /></div>
+          </details>
+        )}
+        {!supplier && ((routines ?? []) as RoutineDoc[]).length > 0 && (
+          <details id="huset" className="card p-4 scroll-mt-4" open={!!sp.huset}>
+            <summary className="cursor-pointer font-medium">Öppna och stänga huset</summary>
+            <div className="mt-3">
+              {sp.signerad && <p className="mb-3 rounded-lg bg-st-genomford-soft px-4 py-2 text-sm text-ok">Tack! Genomgången är signerad.</p>}
+              <Routines
+                routines={(routines ?? []) as RoutineDoc[]}
+                check={checkLinkRoutine.bind(null, token)}
+                sign={signLinkRoutine.bind(null, token)}
+                defaultName={doc.name}
+                message={sp.rutinfel ? ROUTINE_MSG[sp.rutinfel] ?? "Något gick fel." : null}
+              />
+            </div>
+          </details>
+        )}
+        {!supplier && (
+          <details id="ledighet" className="card p-4 scroll-mt-4" open={!!sp.ledig}>
+            <summary className="cursor-pointer font-medium">När jag inte kan jobba</summary>
+            <div className="mt-3">
+              <UnavailabilityForm list={(unavail ?? []) as Unavailable[]} add={addLinkUnavailability.bind(null, token)} remove={removeLinkUnavailability.bind(null, token)} />
+            </div>
           </details>
         )}
         {details && (

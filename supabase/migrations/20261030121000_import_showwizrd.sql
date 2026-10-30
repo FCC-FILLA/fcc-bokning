@@ -12,6 +12,10 @@ declare
   missing text[] := '{}'; i int;
 begin
   select id into v_company from companies where lower(name) = lower(p->>'company') order by created_at limit 1;
+  -- Okänd kund skapas med bara namnet.
+  if v_company is null and nullif(trim(p->>'company'), '') is not null and p->>'company' <> '—' then
+    insert into companies (name) values (trim(p->>'company')) returning id into v_company;
+  end if;
   if v_company is not null then
     select id into v_contact from contacts where company_id = v_company and lower(name) = lower(p->>'contact') limit 1;
   end if;
@@ -71,7 +75,7 @@ begin
       end if;
       insert into quote_lines (quote_id, group_id, article_id, description, line_date, quantity, unit_price, cost, discount_pct, vat_rate, kind, sort_order)
       values (v_quote, coalesce(a.group_id, l->>'group'), a.id, l->>'desc', nullif(l->>'date', '')::date, (l->>'qty')::numeric, (l->>'unit_price')::numeric,
-              coalesce((l->>'cost')::numeric, 0), (l->>'disc')::numeric, 25, (l->>'kind')::quote_line_kind, i);
+              coalesce((l->>'cost')::numeric, 0), (l->>'disc')::numeric, coalesce((l->>'vat')::numeric, 25), (l->>'kind')::quote_line_kind, i);
       n_lines := n_lines + 1;
       a := null;
     end loop;

@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { localToIso } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
+import { readUnavailability } from "@/lib/ledighet";
 
 const MSG: Record<string, string> = {
   stangt: "Passet går inte längre att söka.",
@@ -91,4 +92,34 @@ export async function saveMyDetails(fd: FormData) {
   const { data } = await supabase.rpc("my_details_save", { p: detailsFromForm(fd) });
   revalidatePath("/portal");
   redirect(`/portal?flik=uppgifter&${data === "ok" ? "sparad=1" : "fel=" + encodeURIComponent("Det gick inte att spara.")}`);
+}
+
+export async function addMyUnavailability(fd: FormData) {
+  const r = readUnavailability(fd);
+  if (!r) redirect(`/portal?flik=ledighet&fel=${encodeURIComponent("Kontrollera dagarna och tiderna.")}`);
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("my_unavailability_add", { p_from: r!.from, p_to: r!.to, p_note: r!.note });
+  revalidatePath("/portal");
+  redirect(`/portal?flik=ledighet${data === "ok" ? "" : `&fel=${encodeURIComponent("Det gick inte att spara.")}`}`);
+}
+
+export async function removeMyUnavailability(id: string) {
+  const supabase = await createClient();
+  await supabase.rpc("my_unavailability_delete", { p_id: id });
+  revalidatePath("/portal");
+  redirect("/portal?flik=ledighet");
+}
+
+export async function checkMyRoutine(routineId: string, stepId: string, done: boolean, fd: FormData) {
+  const supabase = await createClient();
+  await supabase.rpc("my_routine_check", { p_routine: routineId, p_step: stepId, p_done: done, p_note: String(fd.get("note") ?? "") });
+  revalidatePath("/portal");
+  redirect(`/portal?flik=huset#rutin-${routineId}`);
+}
+
+export async function signMyRoutine(runId: string, fd: FormData) {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("my_routine_sign", { p_run: runId, p_name: String(fd.get("name") ?? ""), p_note: String(fd.get("note") ?? "") });
+  revalidatePath("/portal");
+  redirect(`/portal?flik=huset${data === "ok" ? "&signerad=1" : `&rutinfel=${String(data)}`}`);
 }

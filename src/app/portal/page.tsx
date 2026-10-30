@@ -1,5 +1,7 @@
 import { StaffInfoBlocks, type StaffInfoBlock } from "@/components/staff-info";
 import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
+import { UnavailabilityForm, type Unavailable } from "@/components/unavailability";
+import { ROUTINE_MSG, Routines, type RoutineDoc } from "@/components/routines";
 import { EventInfo, type StaffEventInfo } from "@/components/event-info";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
@@ -8,12 +10,12 @@ import { fmtDate, fmtTime, isoToDate, isoToLocal, weekday } from "@/lib/datum";
 import { ASSIGNMENT_LABEL, ATTEST_LABEL, shiftHours, workedHours, type AssignmentStatus, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
 import { PushToggle } from "@/components/push-toggle";
-import { apply, removePush, reportTime, saveMyDetails, savePush, signOut, withdraw } from "./actions";
+import { addMyUnavailability, apply, checkMyRoutine, signMyRoutine, removeMyUnavailability, removePush, reportTime, saveMyDetails, savePush, signOut, withdraw } from "./actions";
 
 export const metadata: Metadata = {
   title: "Mina pass",
   manifest: "/manifest.webmanifest",
-  icons: { apple: "/apple-icon.png", icon: "/icon-192.png" },
+  icons: { apple: "/apple-icon.png?v=2", icon: "/icon-192.png?v=2" },
   appleWebApp: { capable: true, title: "FCC Personal", statusBarStyle: "default" },
 };
 export const viewport: Viewport = { themeColor: "#60272b" };
@@ -47,17 +49,21 @@ const TABS = [
   { id: "lediga", label: "Lediga pass" },
   { id: "tidigare", label: "Tidigare" },
   { id: "info", label: "Bra att veta" },
+  { id: "huset", label: "Öppna/stänga" },
+  { id: "ledighet", label: "Kan inte jobba" },
   { id: "uppgifter", label: "Mina uppgifter" },
 ] as const;
 
-export default async function PortalPage({ searchParams }: { searchParams: Promise<{ flik?: string; fel?: string; sokt?: string; aterkallad?: string; rapporterad?: string; sparad?: string }> }) {
+export default async function PortalPage({ searchParams }: { searchParams: Promise<{ flik?: string; fel?: string; sokt?: string; aterkallad?: string; rapporterad?: string; sparad?: string; signerad?: string; rutinfel?: string }> }) {
   const sp = await searchParams;
   const profile = await requireProfile();
   const supabase = await createClient();
-  const [{ data }, { data: info }, { data: details }, { data: me }] = await Promise.all([
+  const [{ data }, { data: info }, { data: details }, { data: unavail }, { data: routines }, { data: me }] = await Promise.all([
     supabase.rpc("portal_shifts"),
     supabase.rpc("my_staff_info"),
     supabase.rpc("my_details"),
+    supabase.rpc("my_unavailability"),
+    supabase.rpc("my_routines"),
     supabase.from("staff").select("name, staff_skills(staff_functions(name))").eq("profile_id", profile.id).maybeSingle(),
   ]);
   const all = (data ?? []) as PortalShift[];
@@ -132,6 +138,17 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Tack! Dina uppgifter är sparade.</p>}
         {tab === "info" ? (
           <StaffInfoBlocks blocks={(info ?? []) as StaffInfoBlock[]} />
+        ) : tab === "huset" ? (
+          <>
+            {sp.signerad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Tack! Genomgången är signerad.</p>}
+            <Routines routines={(routines ?? []) as RoutineDoc[]} check={checkMyRoutine} sign={signMyRoutine} defaultName={me?.name ?? profile.full_name} message={sp.rutinfel ? ROUTINE_MSG[sp.rutinfel] ?? "Något gick fel." : null} />
+          </>
+        ) : tab === "ledighet" ? (
+          me ? (
+            <section className="card p-5"><UnavailabilityForm list={(unavail ?? []) as Unavailable[]} add={addMyUnavailability} remove={removeMyUnavailability} /></section>
+          ) : (
+            <div className="card p-8 text-center text-muted">Ditt konto är inte kopplat till personalregistret ännu.</div>
+          )
         ) : tab === "uppgifter" ? (
           details ? (
             <section className="card p-5 grid gap-3">
@@ -159,7 +176,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
                     </div>
                     {(s.event || s.room) && <p className="text-sm text-muted">{[s.event, s.room].filter(Boolean).join(" · ")}</p>}
                     {s.note && <p className="text-sm">{s.note}</p>}
-                    {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/portal/fil/${id}`} />}
+                    {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/portal/fil/${id}`} functionId={s.function} />}
                     {s.my_status === "tilldelad" && <TimeReport s={s} tab={tab} now={now} />}
                     {tab === "lediga" && (
                       <div className="flex flex-wrap items-center gap-3 pt-1">

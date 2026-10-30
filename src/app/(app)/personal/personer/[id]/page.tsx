@@ -1,3 +1,4 @@
+import { UnavailabilityForm, type Unavailable } from "@/components/unavailability";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canManageStaff, isAdmin, requireProfile } from "@/lib/auth";
@@ -6,7 +7,7 @@ import { ASSIGNMENT_LABEL, KIND_LABEL, type AssignmentStatus, type Staff } from 
 import { getStaffLookups } from "@/lib/personal-data";
 import { createClient } from "@/lib/supabase/server";
 import { CopyButton } from "@/components/copy-button";
-import { inviteStaff, newStaffLink, updateStaff } from "../../actions";
+import { addStaffUnavailability, inviteStaff, newStaffLink, removeStaffUnavailability, updateStaff } from "../../actions";
 
 type Upcoming = {
   status: AssignmentStatus;
@@ -26,7 +27,7 @@ export default async function PersonPage({
   const manager = canManageStaff(profile);
   const admin = isAdmin(profile);
   const supabase = await createClient();
-  const [{ data: p }, { data: skills }, { data: shifts }, { functions }] = await Promise.all([
+  const [{ data: p }, { data: skills }, { data: shifts }, { functions }, { data: un }] = await Promise.all([
     supabase.from("staff").select("*").eq("id", id).maybeSingle(),
     supabase.from("staff_skills").select("function_id").eq("staff_id", id),
     supabase
@@ -38,7 +39,9 @@ export default async function PersonPage({
       .order("starts_at", { referencedTable: "shifts" })
       .limit(50),
     getStaffLookups(),
+    supabase.from("staff_unavailability").select("id, starts_at, ends_at, note").eq("staff_id", id).gt("ends_at", new Date().toISOString()).order("starts_at"),
   ]);
+  const unavailable = (un ?? []) as Unavailable[];
   const { data: detailRow } = admin
     ? await supabase.from("staff_details").select("*").eq("staff_id", id).maybeSingle()
     : await supabase.rpc("staff_details_basic", { p_staff: id });
@@ -171,6 +174,17 @@ export default async function PersonPage({
                 </div>
               ))}
           </dl>
+        )}
+      </section>
+
+      <section id="ledighet" className="card p-5 grid gap-3 scroll-mt-28">
+        <h2 className="text-lg font-semibold">Kan inte jobba</h2>
+        {manager ? (
+          <UnavailabilityForm list={unavailable} add={addStaffUnavailability.bind(null, id)} remove={removeStaffUnavailability.bind(null, id)} />
+        ) : unavailable.length ? (
+          <ul className="text-sm">{unavailable.map((u) => <li key={u.id}>{fmtDate(u.starts_at)} – {fmtDate(u.ends_at)}{u.note ? ` · ${u.note}` : ""}</li>)}</ul>
+        ) : (
+          <p className="text-sm text-muted">Inget markerat.</p>
         )}
       </section>
 
