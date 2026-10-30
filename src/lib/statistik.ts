@@ -28,3 +28,19 @@ export function summarize(s: Stats) {
 
 /** Andel av månadens dagar med bekräftad bokning. */
 export const pct = (m: { days: number; days_in_month: number }) => Math.round((m.days / m.days_in_month) * 100);
+
+export type MoreStats = {
+  top_customers: { id: string; name: string; value: number; hours: number; events: number }[];
+  room_revenue: { room: string; value: number }[];
+  week: { dow: number; hour: number; hours: number }[];
+  lead: { bucket: string; events: number }[];
+  inquiries: { m: number; count: number; won: number }[];
+  staff: { m: number; hours: number; shifts: number }[];
+  booked_hours: number;
+};
+
+/** Förändring mot föregående år i procent, eller null om det saknas jämförelse. */
+export function delta(now: number, before: number): number | null {
+  if (!before) return null;
+  return Math.round(((now - before) / before) * 100);
+}

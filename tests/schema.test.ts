@@ -1094,6 +1094,16 @@ describe("statistik", () => {
     expect(Number(d.quotes[2].won_value)).toBe(10000);
     expect(d.by_category).toEqual([{ category: "Eventbyrå", count: 1, value: 10000 }]);
   });
+
+  it("mer statistik: kunder, lokalintäkt, veckodagar och framförhållning", async () => {
+    const m = await asUser(ADMIN, () => db.query<{ d: { top_customers: { name: string; value: number }[]; week: { dow: number; hour: number; hours: number }[]; lead: { bucket: string; events: number }[]; booked_hours: number } }>("select stats_more(2031) as d"));
+    const d = m.rows[0].d;
+    expect(d.top_customers.find((c) => c.name === "Stat AB")?.value).toBe(10000);
+    // Bokningen 10 juni (tisdag) 09:00 till 11 juni 17:00
+    expect(d.week.find((w) => w.dow === 2 && w.hour === 9)?.hours).toBeGreaterThanOrEqual(1);
+    expect(Number(d.booked_hours)).toBeGreaterThanOrEqual(32);
+    expect(d.lead.reduce((s, x) => s + x.events, 0)).toBeGreaterThan(0);
+  });
 });
 
 describe("förfrågan från hemsidan", () => {
