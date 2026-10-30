@@ -26,7 +26,7 @@ async function report(token: string, fd: FormData) {
   const file = fd.get("photo");
   if (file instanceof File && file.size > 0) {
     if (!IMAGE_TYPES.includes(file.type) || file.size > MAX_IMAGE_BYTES) redirect(`/lokal/${token}?fel=bild#fel`);
-    const path = `fel/${crypto.randomUUID()}.${file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg"}`;
+    const path = `fel/${token}/${crypto.randomUUID()}.${file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg"}`;
     const { error } = await supabase.storage.from("felanmalan").upload(path, file, { contentType: file.type });
     if (!error) photo = path;
   }

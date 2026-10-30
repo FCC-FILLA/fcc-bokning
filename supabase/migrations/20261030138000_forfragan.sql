@@ -1,6 +1,8 @@
 -- Förfrågningsformulär för hemsidan (/forfragan, kan bäddas in med iframe).
--- Kunden anger datum, tid, gäster och typ. Det blir ett evenemang med status Förfrågan, kunden och kontakten läggs upp
--- (eller hittas på e-post), lediga lokaler som passar föreslås, bokare får en notis och kunden ett kvitto via e-post.
+-- Kunden anger datum, tid, gäster och typ. Det blir ett evenemang med status Förfrågan med en ny kontakt (och ny kund om
+-- företagsnamnet inte redan finns). Formuläret är öppet, så det kopplas aldrig automatiskt till befintliga kunder eller kontakter;
+-- möjliga träffar skrivs i anteckningen så att bokaren kan koppla. Lediga lokaler som passar föreslås, bokare får en notis
+-- och kunden ett kvitto via e-post.
 
 create table inquiries (
   id uuid primary key default gen_random_uuid(),
@@ -37,8 +39,9 @@ $$;
 -- Lediga lokaler som rymmer gästerna (minsta först), lediga alla dagar i tidsfönstret.
 create function suggest_rooms(p_from timestamptz, p_to timestamptz, p_days int, p_guests int, p_setup text) returns jsonb
 language sql stable security definer set search_path = public as $$
-  select coalesce(jsonb_agg(jsonb_build_object('room_id', x.id, 'name', x.name, 'capacity', x.cap) order by x.cap), '[]'::jsonb)
+  select coalesce(jsonb_agg(jsonb_build_object('room_id', y.id, 'name', y.name, 'capacity', y.cap) order by y.cap), '[]'::jsonb)
   from (
+  select x.id, x.name, x.cap from (
     select r.id, r.name,
       (select max(c.capacity) from room_capacities c where c.room_id = r.id and (p_setup is null or c.setup_id = p_setup)) as cap
     from rooms r
@@ -51,7 +54,9 @@ language sql stable security definer set search_path = public as $$
       where rooms_overlap(b.room_id, x.id)
         and tstzrange(b.starts_at, b.ends_at) && tstzrange(p_from + make_interval(days => d), p_to + make_interval(days => d))
     )
+  order by x.cap
   limit 3
+  ) y
 $$;
 revoke execute on function suggest_rooms(timestamptz, timestamptz, int, int, text) from public, anon;
 grant execute on function suggest_rooms(timestamptz, timestamptz, int, int, text) to authenticated;
@@ -66,33 +71,46 @@ declare
   v_title text := nullif(left(trim(coalesce(p ->> 'title', '')), 200), '');
   v_type text := nullif(p ->> 'event_type_id', '');
   v_setup text := nullif(p ->> 'setup_id', '');
-  v_guests int := nullif(p ->> 'guests', '')::int;
-  v_days int := least(greatest(coalesce(nullif(p ->> 'days', '')::int, 1), 1), 14);
-  v_from timestamptz := (p ->> 'starts_at')::timestamptz;
-  v_to timestamptz := (p ->> 'ends_at')::timestamptz;
+  v_guests int; v_days int; v_from timestamptz; v_to timestamptz;
   v_msg text := nullif(left(trim(coalesce(p ->> 'message', '')), 3000), '');
   v_company_id uuid; v_contact_id uuid; v_event uuid; v_sugg jsonb; v_typename text; r record;
+  v_match text; v_clean jsonb;
   v_site text := coalesce(nullif((select value from app_settings where key = 'site_url'), ''), 'https://fcc-bokning.vercel.app');
 begin
   if coalesce(p ->> 'website', '') <> '' then return 'ok'; end if;  -- fälla för robotar
+  begin
+    v_guests := nullif(trim(coalesce(p ->> 'guests', '')), '')::int;
+  exception when others then return 'gaster';
+  end;
+  begin
+    v_days := least(greatest(coalesce(nullif(trim(coalesce(p ->> 'days', '')), '')::int, 1), 1), 14);
+    v_from := (p ->> 'starts_at')::timestamptz;
+    v_to := (p ->> 'ends_at')::timestamptz;
+  exception when others then return 'tid';
+  end;
   if v_name = '' or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then return 'kontakt'; end if;
   if v_from is null or v_to is null or v_to <= v_from or v_from < now() or v_from > now() + interval '5 years' then return 'tid'; end if;
   if v_guests is not null and (v_guests < 1 or v_guests > 10000) then return 'gaster'; end if;
   if v_type is not null and not exists (select 1 from event_types where id = v_type) then v_type := null; end if;
   if v_setup is not null and not exists (select 1 from setups where id = v_setup) then v_setup := null; end if;
-  if (select count(*) from inquiries where created_at > now() - interval '1 hour') >= 30 then return 'for_manga'; end if;
+  if (select count(*) from inquiries where created_at > now() - interval '1 hour') >= 60 then return 'for_manga'; end if;
+  if (select count(*) from inquiries where created_at > now() - interval '1 day' and data ->> 'email' = v_email) >= 3 then return 'for_manga'; end if;
 
-  -- Kontakten: befintlig på e-post, annars ny (med kund om företagsnamn angetts).
-  select ct.id, ct.company_id into v_contact_id, v_company_id from contacts ct where lower(ct.email) = v_email order by ct.created_at limit 1;
-  if v_contact_id is null then
-    if v_company is not null then
-      select id into v_company_id from companies where lower(name) = lower(v_company) order by created_at limit 1;
-      if v_company_id is null then
-        insert into companies (name, email, phone, notes) values (v_company, v_email, v_phone, 'Skapad från förfrågan på hemsidan') returning id into v_company_id;
-      end if;
-    end if;
-    insert into contacts (company_id, name, email, phone) values (v_company_id, v_name, v_email, v_phone) returning id into v_contact_id;
+  -- Möjliga befintliga träffar noteras men kopplas inte (formuläret är öppet för alla).
+  select string_agg(distinct x, '; ') into v_match from (
+    select 'kontakten ' || ct.name || coalesce(' (' || c.name || ')', '') as x
+    from contacts ct left join companies c on c.id = ct.company_id where lower(ct.email) = v_email
+    union all
+    select 'kunden ' || c.name from companies c where v_company is not null and lower(c.name) = lower(v_company)
+  ) m;
+  if v_company is not null and not exists (select 1 from companies where lower(name) = lower(v_company)) then
+    insert into companies (name, email, phone, notes) values (v_company, v_email, v_phone, 'Skapad från förfrågan på hemsidan') returning id into v_company_id;
   end if;
+  insert into contacts (company_id, name, email, phone, notes)
+  values (v_company_id, v_name, v_email, v_phone, 'Från förfrågan på hemsidan' || coalesce(' (företag: ' || v_company || ')', ''))
+  returning id into v_contact_id;
+  v_clean := jsonb_strip_nulls(jsonb_build_object('name', v_name, 'email', v_email, 'phone', v_phone, 'company', v_company, 'title', v_title,
+    'event_type_id', v_type, 'setup_id', v_setup, 'guests', v_guests, 'days', v_days, 'starts_at', v_from, 'ends_at', v_to, 'message', v_msg));
 
   v_sugg := suggest_rooms(v_from, v_to, v_days, v_guests, v_setup);
   select name into v_typename from event_types where id = v_type;
@@ -104,12 +122,13 @@ begin
       || 'Önskad tid: ' || to_char(v_from at time zone 'Europe/Stockholm', 'YYYY-MM-DD HH24:MI') || '–' || to_char(v_to at time zone 'Europe/Stockholm', 'HH24:MI')
       || case when v_days > 1 then ', ' || v_days || ' dagar' else '' end
       || coalesce(E'\nMöblering: ' || (select name from setups where id = v_setup), '')
-      || E'\nKontakt: ' || v_name || ', ' || v_email || coalesce(', ' || v_phone, '')
+      || E'\nKontakt: ' || v_name || ', ' || v_email || coalesce(', ' || v_phone, '') || coalesce(E'\nFöretag: ' || v_company, '')
+      || coalesce(E'\nFinns kanske redan: ' || v_match || '. Koppla evenemanget om det stämmer.', '')
       || case when jsonb_array_length(v_sugg) > 0
            then E'\nLediga lokaler som passar: ' || (select string_agg((s ->> 'name') || ' (max ' || (s ->> 'capacity') || ')', ', ') from jsonb_array_elements(v_sugg) s)
            else E'\nIngen ledig lokal som rymmer alla hittades automatiskt.' end
   ) returning id into v_event;
-  insert into inquiries (event_id, data, suggested) values (v_event, p - 'website', v_sugg);
+  insert into inquiries (event_id, data, suggested) values (v_event, v_clean, v_sugg);
 
   for r in select id from profiles where active and role::text in ('admin', 'bokare') loop
     perform notify_person(r.id, 'forfragan', 'Ny förfrågan: ' || coalesce(v_company, v_name),

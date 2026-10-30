@@ -9,8 +9,8 @@ language sql stable security invoker set search_path = public as $$
     select b.room_id, b.starts_at, b.ends_at, e.status, e.event_type_id
     from bookings b join events e on e.id = b.event_id
     where e.status in ('preliminar', 'bekraftad', 'genomford')
-      and b.starts_at < make_date(p_year + 1, 1, 1)::timestamptz
-      and b.ends_at > make_date(p_year, 1, 1)::timestamptz
+      and b.starts_at < (make_date(p_year + 1, 1, 1)::timestamp at time zone 'Europe/Stockholm')
+      and b.ends_at > (make_date(p_year, 1, 1)::timestamp at time zone 'Europe/Stockholm')
   ),
   -- Dagar per lokal och månad då lokalen (eller en sal den ingår i, eller en del av den) är bokad.
   room_days as (
@@ -22,7 +22,8 @@ language sql stable security invoker set search_path = public as $$
     join active_b b on rooms_overlap(b.room_id, r.id)
     cross join lateral (
       select g::date as day, b.status <> 'preliminar' as firm, b.room_id = r.id as direct,
-        extract(epoch from (least(b.ends_at, (g + interval '1 day')::timestamptz) - greatest(b.starts_at, g::timestamptz))) / 3600 as hours
+        extract(epoch from (least(b.ends_at, ((g::date + 1)::timestamp at time zone 'Europe/Stockholm'))
+                            - greatest(b.starts_at, (g::date::timestamp at time zone 'Europe/Stockholm')))) / 3600 as hours
       from generate_series((b.starts_at at time zone 'Europe/Stockholm')::date, ((b.ends_at - interval '1 second') at time zone 'Europe/Stockholm')::date, interval '1 day') g
     ) d
     where r.active and r.bookable and extract(year from d.day) = p_year
@@ -87,4 +88,5 @@ language sql stable security invoker set search_path = public as $$
                        and exists (select 1 from bookings b where b.event_id = e.id and extract(year from b.starts_at at time zone 'Europe/Stockholm') = p_year))
   )
 $$;
+revoke execute on function stats_year(int) from public, anon;
 grant execute on function stats_year(int) to authenticated;

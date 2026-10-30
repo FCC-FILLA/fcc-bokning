@@ -42,6 +42,7 @@ language sql stable set search_path = public as $$
     )
   end
 $$;
+revoke execute on function changeover_needed(text, text) from public, anon;
 grant execute on function changeover_needed(text, text) to authenticated;
 
 -- Par av bokningar som följer direkt på varandra i samma lokal där tiden emellan är för kort.
@@ -54,8 +55,8 @@ select
   r2.name as next_room_name, b2.starts_at as next_starts_at, b2.ends_at as next_ends_at, b2.rig_minutes as next_rig_minutes,
   b2.setup_id as next_setup_id, s2.name as next_setup_name,
   (extract(epoch from (b2.starts_at - b1.ends_at)) / 60)::int as gap_minutes,
-  (b1.strike_minutes + b2.rig_minutes + changeover_needed(b1.setup_id, b2.setup_id)) as needed_minutes,
-  changeover_needed(b1.setup_id, b2.setup_id) as changeover_minutes
+  (b1.strike_minutes + b2.rig_minutes + co.m) as needed_minutes,
+  co.m as changeover_minutes
 from bookings b1
 join events e1 on e1.id = b1.event_id and e1.status in ('forfragan', 'preliminar', 'bekraftad')
 join bookings b2 on b2.id <> b1.id
@@ -66,7 +67,9 @@ join rooms r1 on r1.id = b1.room_id
 join rooms r2 on r2.id = b2.room_id
 left join setups s1 on s1.id = b1.setup_id
 left join setups s2 on s2.id = b2.setup_id
-where rooms_overlap(b1.room_id, b2.room_id)
+cross join lateral (select changeover_needed(b1.setup_id, b2.setup_id) as m) co
+where b1.ends_at > now() - interval '60 days'
+  and rooms_overlap(b1.room_id, b2.room_id)
   -- Bara närmast följande bokning i lokalen.
   and not exists (
     select 1 from bookings b3 join events e3 on e3.id = b3.event_id and e3.status in ('forfragan', 'preliminar', 'bekraftad')
@@ -74,7 +77,7 @@ where rooms_overlap(b1.room_id, b2.room_id)
       and rooms_overlap(b3.room_id, b1.room_id) and rooms_overlap(b3.room_id, b2.room_id)
       and b3.starts_at >= b1.ends_at and b3.ends_at <= b2.starts_at
   )
-  and extract(epoch from (b2.starts_at - b1.ends_at)) / 60 < b1.strike_minutes + b2.rig_minutes + changeover_needed(b1.setup_id, b2.setup_id);
+  and extract(epoch from (b2.starts_at - b1.ends_at)) / 60 < b1.strike_minutes + b2.rig_minutes + co.m;
 grant select on changeover_warnings to authenticated;
 
 -- Standardtider att börja med (kan ändras under Inställningar → Omställning).

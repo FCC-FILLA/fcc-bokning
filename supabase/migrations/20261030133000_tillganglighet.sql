@@ -18,19 +18,20 @@ grant select, insert, update, delete on staff_unavailability to authenticated;
 revoke all on staff_unavailability from anon;
 
 -- Är personen upptagen: markerat ledig, eller redan tilldelad ett annat pass som överlappar.
-create function staff_busy(p_staff uuid, p_from timestamptz, p_to timestamptz, p_except_shift uuid default null) returns boolean
+create function staff_busy(p_staff uuid, p_from timestamptz, p_to timestamptz, p_except_shift uuid default null, p_count_invited boolean default false) returns boolean
 language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from staff_unavailability u
     where u.staff_id = p_staff and tstzrange(u.starts_at, u.ends_at) && tstzrange(p_from, p_to)
   ) or exists (
     select 1 from shift_assignments a join shifts s on s.id = a.shift_id
-    where a.staff_id = p_staff and a.status::text = 'tilldelad' and s.id is distinct from p_except_shift
+    where a.staff_id = p_staff and s.id is distinct from p_except_shift
+      and (a.status::text = 'tilldelad' or (p_count_invited and a.status::text = 'inbjuden'))
       and tstzrange(s.starts_at, s.ends_at) && tstzrange(p_from, p_to)
   )
 $$;
-revoke execute on function staff_busy(uuid, timestamptz, timestamptz, uuid) from public, anon;
-grant execute on function staff_busy(uuid, timestamptz, timestamptz, uuid) to authenticated;
+-- Bara för databasen själv (kedjan); planerarna använder staff_busy_reason.
+revoke execute on function staff_busy(uuid, timestamptz, timestamptz, uuid, boolean) from public, anon, authenticated;
 
 -- Varför någon är upptagen (för planerarna): ledighet eller annat pass.
 create function staff_busy_reason(p_staff uuid, p_from timestamptz, p_to timestamptz, p_except_shift uuid default null) returns text
@@ -44,6 +45,7 @@ language sql stable security invoker set search_path = public as $$
         and tstzrange(s.starts_at, s.ends_at) && tstzrange(p_from, p_to) limit 1)
   )
 $$;
+revoke execute on function staff_busy_reason(uuid, timestamptz, timestamptz, uuid) from public, anon;
 grant execute on function staff_busy_reason(uuid, timestamptz, timestamptz, uuid) to authenticated;
 
 -- Personalens egna ledigheter. Internpersonal via inloggning, frilans och leverantörer via sin länk.
@@ -130,7 +132,7 @@ begin
       select a.id, a.staff_id, st.email, st.name, st.link_token into nxt
       from shift_assignments a join staff st on st.id = a.staff_id
       where a.shift_id = sh.id and a.status::text = 'vantar' and st.active
-        and not staff_busy(st.id, sh.starts_at, sh.ends_at, sh.id)
+        and not staff_busy(st.id, sh.starts_at, sh.ends_at, sh.id, true)
       order by a.invite_order nulls last, a.applied_at
       limit 1;
       exit when nxt.id is null;

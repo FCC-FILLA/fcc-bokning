@@ -36,8 +36,16 @@ revoke all on room_issues from anon;
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('felanmalan', 'felanmalan', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
 on conflict (id) do nothing;
+-- Uppladdning kräver en giltig QR-kod i sökvägen: fel/<lokalens kort-token>/<namn>.
+create function room_card_path_ok(p_name text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select p_name ~ '^fel/[0-9a-f-]{36}/[0-9a-f-]{36}\.(jpg|png|webp)$'
+    and exists (select 1 from rooms where card_token::text = split_part(p_name, '/', 2) and active)
+$$;
+revoke execute on function room_card_path_ok(text) from public;
+grant execute on function room_card_path_ok(text) to anon, authenticated;
 create policy "alla laddar upp felfoto" on storage.objects for insert to anon, authenticated
-  with check (bucket_id = 'felanmalan' and name like 'fel/%');
+  with check (bucket_id = 'felanmalan' and public.room_card_path_ok(name));
 create policy "personal läser felfoto" on storage.objects for select to authenticated
   using (bucket_id = 'felanmalan' and public.is_member());
 
@@ -90,7 +98,7 @@ begin
   insert into room_issues (room_id, title, description, reporter_name, reporter_contact, photo_path)
   values (r.id, left(trim(p_title), 200), nullif(left(trim(coalesce(p_description, '')), 2000), ''),
           nullif(left(trim(coalesce(p_name, '')), 80), ''), nullif(left(trim(coalesce(p_contact, '')), 120), ''),
-          case when p_photo like 'fel/%' then left(p_photo, 200) end)
+          case when p_photo like 'fel/' || p_token::text || '/%' then left(p_photo, 200) end)
   returning id into v_id;
   for p in
     select id from profiles

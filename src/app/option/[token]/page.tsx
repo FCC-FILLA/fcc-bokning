@@ -22,7 +22,7 @@ async function answer(token: string, value: "vill_boka" | "slapper", fd: FormDat
   const { data } = await supabase.rpc("option_respond", { p_token: token, p_answer: value, p_name: String(fd.get("name") ?? "") });
   deliverNotifications();
   await kickMail();
-  redirect(`/option/${token}?${data === "ok" ? "svar=1" : "fel=1"}`);
+  redirect(`/option/${token}?${data === "ok" ? "svar=1" : `fel=${String(data)}`}`);
 }
 
 export default async function OptionPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ svar?: string; fel?: string }> }) {
@@ -33,7 +33,8 @@ export default async function OptionPage({ params, searchParams }: { params: Pro
   const [{ data }, company] = await Promise.all([supabase.rpc("option_info", { p_token: token }), loadCompany(supabase)]);
   if (!data) notFound();
   const d = data as Info;
-  const open = (d.status === "preliminar" || d.status === "forfragan") && !d.customer_response;
+  const expired = !!d.option_expires_on && d.option_expires_on < new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" });
+  const open = (d.status === "preliminar" || d.status === "forfragan") && !d.customer_response && !expired;
   const days = new Map<string, Info["bookings"]>();
   for (const b of d.bookings) days.set(isoToDate(b.starts_at), [...(days.get(isoToDate(b.starts_at)) ?? []), b]);
 
@@ -47,7 +48,11 @@ export default async function OptionPage({ params, searchParams }: { params: Pro
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-6 grid gap-5">
-        {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">Det gick inte att spara svaret. Kontakta oss gärna direkt.</p>}
+        {sp.fel && (
+          <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
+            {sp.fel === "utgangen" ? "Optionen har gått ut. Kontakta oss så ser vi om lokalerna fortfarande är lediga." : "Det gick inte att spara svaret. Kontakta oss gärna direkt."}
+          </p>
+        )}
         {d.customer_response === "vill_boka" && (
           <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-ok">
             Tack! Vi har fått er bekräftelse{d.customer_response_at ? ` ${fmtDate(d.customer_response_at)}` : ""} och återkommer med bokningsbekräftelse.

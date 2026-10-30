@@ -1,7 +1,8 @@
 -- Automatisk optionsbevakning.
 -- * Några dagar innan optionen går ut får kundens kontakt ett mejl med en länk där de kan bekräfta att de vill boka eller släppa optionen.
 -- * Ansvarig får en notis när mejlet går, när kunden svarar och när optionen har gått ut.
--- * Släpper kunden avbokas evenemanget, och den som står näst på tur i optionskön får besked (mejl till kontakten, notis till ansvarig).
+-- * Släpper kunden avbokas evenemanget, och den som flyttas upp till första plats i optionskön får besked (mejl till kontakten, notis till ansvarig).
+-- * När optionen har gått ut får ansvarig en notis. Optionen släpps inte automatiskt; ansvarig bestämmer.
 
 alter table events add column option_token uuid not null default gen_random_uuid();
 create unique index events_option_token on events (option_token);
@@ -23,6 +24,7 @@ begin
   return new;
 end $$;
 create trigger events_option_reset before update of option_expires_on on events for each row execute function events_option_reset();
+revoke execute on function events_option_reset() from public, anon;
 
 -- Notisslaget "option".
 update profiles set notify_kinds = notify_kinds || '{option}' where not ('option' = any (notify_kinds));
@@ -44,6 +46,7 @@ language sql stable set search_path = public as $$
     E'\n' order by b.starts_at)
   from bookings b join rooms r on r.id = b.room_id where b.event_id = p_event
 $$;
+revoke execute on function event_when_text(uuid) from public, anon, authenticated;
 
 -- Mejl till kundens kontakt med länk till optionssidan.
 create function send_option_reminder(p_event uuid) returns boolean
@@ -53,6 +56,8 @@ declare
   v_site text := coalesce(nullif((select value from app_settings where key = 'site_url'), ''), 'https://fcc-bokning.vercel.app');
   v_reply text := (select email from profiles where id = (select responsible_id from events where id = p_event));
 begin
+  -- Anropas av det dagliga jobbet (ingen inloggad) eller av en bokare.
+  if auth.uid() is not null and not can_book() then raise exception 'Ingen behörighet'; end if;
   select * into e from events where id = p_event;
   if e.id is null or e.status <> 'preliminar' or e.option_expires_on is null then return false; end if;
   select * into ct from contacts where id = e.contact_id;
@@ -64,7 +69,7 @@ begin
     'Hej ' || split_part(coalesce(ct.name, ''), ' ', 1) || E'!\n\nVi håller lokalerna för ' || e.title || ' preliminärt åt er till och med '
       || to_char(e.option_expires_on, 'YYYY-MM-DD') || E'.\n\n' || coalesce(event_when_text(e.id), '')
       || E'\n\nVia länken nedan kan ni bekräfta att ni vill boka, eller släppa optionen om ni inte behöver lokalerna. '
-      || E'Hör inget av er innan dess släpps optionen.\n\nVänliga hälsningar\nFiladelfia Convention Center',
+      || E'Har vi inte hört av er innan dess kontaktar vi er om lokalerna.\n\nVänliga hälsningar\nFiladelfia Convention Center',
     v_site || '/option/' || e.option_token, 'option', e.id, v_reply
   );
   update events set option_reminded_at = now() where id = e.id;
@@ -140,7 +145,7 @@ $$;
 create function option_respond(p_token uuid, p_answer text, p_name text) returns text
 language plpgsql security definer set search_path = public as $$
 declare
-  e events; q record;
+  e events; q record; v_before uuid[];
   v_site text := coalesce(nullif((select value from app_settings where key = 'site_url'), ''), 'https://fcc-bokning.vercel.app');
   v_name text := nullif(left(trim(coalesce(p_name, '')), 80), '');
 begin
@@ -148,6 +153,8 @@ begin
   if e.id is null then return 'saknas'; end if;
   if e.status not in ('forfragan', 'preliminar') then return 'stangd'; end if;
   if p_answer not in ('vill_boka', 'slapper') then return 'fel'; end if;
+  if e.option_expires_on is not null and e.option_expires_on < (now() at time zone 'Europe/Stockholm')::date then return 'utgangen'; end if;
+  if e.customer_response = p_answer then return 'ok'; end if;   -- samma svar igen: inga nya notiser
 
   if p_answer = 'vill_boka' then
     update events set customer_response = 'vill_boka', customer_response_at = now(), customer_response_name = v_name where id = e.id;
@@ -158,6 +165,8 @@ begin
     return 'ok';
   end if;
 
+  -- Vilka som redan står först innan avbokningen (de ska inte få beskedet).
+  select coalesce(array_agg(op.event_id), '{}') into v_before from option_places op where op.place = 1;
   update events set status = 'avbokad', customer_response = 'slapper', customer_response_at = now(), customer_response_name = v_name where id = e.id;
   if e.responsible_id is not null then
     perform notify_person(e.responsible_id, 'option', format('Kunden släppte optionen: %s', e.title),
@@ -172,7 +181,7 @@ begin
     join events o on o.id = ob.event_id and o.status in ('forfragan', 'preliminar')
     left join contacts ct on ct.id = o.contact_id
     join option_places op on op.event_id = o.id and op.place = 1
-    where b.event_id = e.id and b.ends_at > now()
+    where b.event_id = e.id and b.ends_at > now() and not (o.id = any (v_before))
   loop
     if q.responsible_id is not null then
       perform notify_person(q.responsible_id, 'option', format('Först i kön: %s', q.title),
