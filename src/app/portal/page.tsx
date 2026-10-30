@@ -82,7 +82,11 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
       <header className="bg-brand text-white">
         <div className="mx-auto max-w-2xl px-4 pt-5 pb-4 grid gap-3">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-display font-semibold tracking-wide">FCC <span className="font-normal opacity-75">Personal</span></p>
+            <p className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/brand/fcc-logo-white.svg" alt="Filadelfia Convention Center" width={119} height={30} className="h-[30px] w-auto" />
+              <span className="border-l border-white/30 pl-3 font-display tracking-wide opacity-85">Personal</span>
+            </p>
             <div className="flex items-center gap-3 text-sm">
               <Link href="/konto" className="opacity-85 hover:underline">Konto</Link>
               <form action={signOut}><button className="opacity-85 hover:underline" type="submit">Logga ut</button></form>

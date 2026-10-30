@@ -242,7 +242,7 @@ export async function renderQuotePdf(doc: QuoteDoc, images: PdfImages = new Map(
 }
 
 const okImage = (p: string | null): p is string =>
-  !!p && (p.startsWith("/lokaler/") || /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\//.test(p));
+  !!p && ((p.startsWith("/lokaler/") || p.startsWith("/brand/")) || /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\//.test(p));
 
 /** Hämtar lokal- och artikelbilder. Lokala sökvägar via sajtens egen adress. Misslyckas en bild hoppar vi bara över den. */
 export async function fetchPdfImages(doc: QuoteDoc, origin: string): Promise<PdfImages> {

@@ -20,8 +20,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="min-h-dvh grid place-items-center px-4 py-10">
       <div className="w-full max-w-sm grid gap-6">
-        <div className="grid gap-1">
-          <p className="label">Filadelfia Convention Center</p>
+        <div className="grid gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/fcc-logo-black.svg" alt="Filadelfia Convention Center" width={240} height={61} className="h-auto w-60" />
           <h1 className="text-3xl font-semibold text-brand">Bokning</h1>
         </div>
         <LinkSession />
