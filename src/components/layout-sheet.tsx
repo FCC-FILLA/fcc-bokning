@@ -1,5 +1,5 @@
 import { LayoutDrawing } from "@/components/layout-drawing";
-import { countItems, type FurnitureType, type LayoutItem, type RoomPlan } from "@/lib/moblering";
+import { countItems, focusView, type FurnitureType, type LayoutItem, type RoomPlan } from "@/lib/moblering";
 
 /** Ritningen med ställ-lista och instruktioner. Används för utskrift och på personalens pass. */
 export function LayoutSheet({
@@ -14,6 +14,7 @@ export function LayoutSheet({
         <LayoutDrawing
           plan={plan}
           items={items}
+          view={focusView(plan, items)}
           colors={Object.fromEntries(types.map((t) => [t.id, t.color]))}
           names={Object.fromEntries(types.map((t) => [t.id, t.name]))}
           className="block"

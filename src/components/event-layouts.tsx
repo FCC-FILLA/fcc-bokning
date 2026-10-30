@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { canManageStaff, getProfile } from "@/lib/auth";
 import { fmtDate, fmtTime } from "@/lib/datum";
-import { countItems, parseItems, planFor } from "@/lib/moblering";
+import { countItems, focusView, parseItems, planFor } from "@/lib/moblering";
 import { loadFurniture } from "@/lib/moblering-server";
 import { createClient } from "@/lib/supabase/server";
 import { LayoutDrawing } from "@/components/layout-drawing";
@@ -46,7 +46,7 @@ export async function EventLayouts({ eventId }: { eventId: string }) {
             return (
               <div key={x.id} className="rounded-lg border border-line overflow-hidden grid">
                 <Link href={`/mobleringar/${x.id}`} className="bg-white border-b border-line">
-                  <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} colors={colors} numbers={false} grid={false} className="block" />
+                  <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} view={focusView(planFor(room?.plan, room?.kvm ?? null), items)} colors={colors} numbers={false} grid={false} className="block" />
                 </Link>
                 <div className="p-3 flex flex-wrap items-center gap-2">
                   <span className="grid flex-1 min-w-40">

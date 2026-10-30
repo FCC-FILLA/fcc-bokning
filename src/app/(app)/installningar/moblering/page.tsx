@@ -14,7 +14,7 @@ export default async function FurniturePage({ searchParams }: { searchParams: Pr
       <div className="grid gap-1">
         <h1 className="text-2xl font-semibold">Möbler och inventarier</h1>
         <p className="text-sm text-muted">
-          Måtten används i ritverktyget. Fyll i hur många ni har i lager, så varnar ritningen när en uppställning kräver fler än ni äger.
+          Måtten används i ritverktyget. Lagersaldot kommer från inventarielistan. Ritningen varnar när en uppställning kräver fler än ni äger. Möbler som hyrs in (t.ex. från Westmans) får leverantören ifylld och räknas inte mot lagret.
         </p>
       </div>
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
@@ -25,7 +25,7 @@ export default async function FurniturePage({ searchParams }: { searchParams: Pr
             <thead className="bg-sunk text-left">
               <tr>
                 <th className="px-3 py-2">Namn</th><th className="px-2">Form</th><th className="px-2">Bredd m</th><th className="px-2">Djup m</th>
-                <th className="px-2">Stolar</th><th className="px-2">Max stolar</th><th className="px-2">I lager</th><th className="px-2">Aktiv</th>
+                <th className="px-2">Stolar</th><th className="px-2">Max stolar</th><th className="px-2">I lager</th><th className="px-2">Leverantör</th><th className="px-2">Aktiv</th>
               </tr>
             </thead>
             <tbody>
@@ -38,6 +38,7 @@ export default async function FurniturePage({ searchParams }: { searchParams: Pr
                   <td className="px-2">{t.shape === "rect" || t.shape === "round" ? <input className="input h-8 w-16" name={`chairs_${t.id}`} defaultValue={t.default_chairs} inputMode="numeric" aria-label={`Stolar ${t.name}`} /> : null}</td>
                   <td className="px-2">{t.shape === "rect" || t.shape === "round" ? <input className="input h-8 w-16" name={`max_${t.id}`} defaultValue={t.max_chairs} inputMode="numeric" aria-label={`Max stolar ${t.name}`} /> : null}</td>
                   <td className="px-2">{t.shape !== "fixed" ? <input className="input h-8 w-20" name={`stock_${t.id}`} defaultValue={t.stock ?? ""} placeholder="–" inputMode="numeric" aria-label={`Lager ${t.name}`} /> : null}</td>
+                  <td className="px-2">{t.shape !== "fixed" ? <input className="input h-8 w-28" name={`supplier_${t.id}`} defaultValue={t.supplier ?? ""} placeholder="eget" aria-label={`Leverantör ${t.name}`} /> : null}</td>
                   <td className="px-2"><input type="checkbox" name={`active_${t.id}`} defaultChecked={t.active} aria-label={`Aktiv ${t.name}`} /></td>
                 </tr>
               ))}

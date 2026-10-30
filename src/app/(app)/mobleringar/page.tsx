@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { canManageStaff, isAdmin, requireProfile } from "@/lib/auth";
 import { fmtDate } from "@/lib/datum";
-import { countItems, parseItems, planFor } from "@/lib/moblering";
+import { countItems, focusView, parseItems, planFor } from "@/lib/moblering";
 import { loadFurniture } from "@/lib/moblering-server";
 import { createClient } from "@/lib/supabase/server";
 import { LayoutDrawing } from "@/components/layout-drawing";
@@ -36,7 +36,7 @@ export default async function LayoutsPage({ searchParams }: { searchParams: Prom
     return (
       <Link key={x.id} href={`/mobleringar/${x.id}`} className="card overflow-hidden hover:shadow-md transition-shadow grid">
         <div className="border-b border-line bg-white">
-          <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} colors={colors} numbers={false} grid={false} className="block" />
+          <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} view={focusView(planFor(room?.plan, room?.kvm ?? null), items)} colors={colors} numbers={false} grid={false} className="block" />
         </div>
         <div className="p-3 grid gap-0.5">
           <span className="font-semibold">{x.name}</span>

@@ -15,6 +15,7 @@ export type FurnitureType = {
   color: string | null;
   sort_order: number;
   active: boolean;
+  supplier?: string | null;
 };
 
 export type LayoutItem = {
@@ -176,7 +177,8 @@ export const GEN_LABEL: Record<GenKind, string> = {
 
 /** Bygger en uppställning som fyller lokalen tills gästantalet nås eller ytan tar slut. */
 export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions): { items: LayoutItem[]; seats: number; full: boolean } {
-  const type = (id: string | undefined, fallback: string) => types.find((t) => t.id === id) ?? types.find((t) => t.id === fallback)!;
+  const type = (id: string | undefined, ...fallbacks: string[]) =>
+    types.find((t) => t.id === id) ?? fallbacks.map((f) => types.find((t) => t.id === f)).find(Boolean)!;
   // Golvytan: lokalens markerade möblerbara yta, annars hela ritningen.
   const A = plan.area ?? { x: 0, y: 0, w: plan.width, h: plan.depth };
   const x0 = A.x + o.margin;
@@ -218,8 +220,9 @@ export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions):
       return 1;
     });
   } else if (o.kind === "klassrum") {
-    const t = type(o.table, "skolbord");
-    const cap = Math.max(1, t.default_chairs || 3);
+    const t = type(o.table, "bord180", "skolbord");
+    // En sida med stolar: ungefär 60 cm per person.
+    const cap = Math.max(1, Math.floor(Number(t.width_m) / 0.6));
     rows(Number(t.width_m) + 0.05, Number(t.depth_m) + 1.0, (cx, cy) => {
       if (!free(cx, cy, Number(t.width_m) / 2, Number(t.depth_m) / 2 + 0.5)) return 0;
       const it = newItem(t, cx, cy - 0.25);
@@ -247,7 +250,7 @@ export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions):
     }
   } else {
     const mingel = o.kind === "mingel";
-    const t = type(o.table, mingel ? "stabord" : "rund180");
+    const t = mingel ? type(o.table, "stabord80", "stabord") : type(o.table, "rund150", "rund180");
     const per = mingel ? 0 : Math.max(1, Math.min(o.perTable ?? t.default_chairs ?? 8, t.max_chairs || 40));
     // Avstånd mitt till mitt: bordet + stolar på båda sidor + passage.
     const pitch = mingel ? 3.2 : Number(t.width_m) + 1.5;
@@ -274,3 +277,18 @@ export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions):
 }
 
 export const fmtM = (n: number) => `${Number(n.toFixed(2)).toLocaleString("sv-SE")} m`;
+
+/** Utsnitt att visa: golvytan plus allt som är ritat, med lite luft. Hela planen om inget finns. */
+export function focusView(plan: RoomPlan, items: LayoutItem[], pad = 2): Area {
+  const boxes = items.map((i) => {
+    const r = Math.max(i.w, i.d) / 2 + (i.chairs ? 0.7 : 0);
+    return { x0: i.x - r, y0: i.y - r, x1: i.x + r, y1: i.y + r };
+  });
+  if (plan.area) boxes.push({ x0: plan.area.x, y0: plan.area.y, x1: plan.area.x + plan.area.w, y1: plan.area.y + plan.area.h });
+  if (!boxes.length) return { x: 0, y: 0, w: plan.width, h: plan.depth };
+  const x0 = Math.max(0, Math.min(...boxes.map((b) => b.x0)) - pad);
+  const y0 = Math.max(0, Math.min(...boxes.map((b) => b.y0)) - pad);
+  const x1 = Math.min(plan.width, Math.max(...boxes.map((b) => b.x1)) + pad);
+  const y1 = Math.min(plan.depth, Math.max(...boxes.map((b) => b.y1)) + pad);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}

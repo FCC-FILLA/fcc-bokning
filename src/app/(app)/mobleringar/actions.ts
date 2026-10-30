@@ -176,6 +176,7 @@ export async function saveFurniture(fd: FormData) {
         ...(chairs != null ? { default_chairs: Math.round(chairs), max_chairs: Math.max(Math.round(chairs), Math.round(num("max") ?? chairs)) } : {}),
         stock: num("stock") == null ? null : Math.round(num("stock")!),
         active: fd.get(`active_${id}`) === "on",
+        supplier: opt(fd.get(`supplier_${id}`)),
       })
       .eq("id", id);
     if (error) fail(path, `Kunde inte spara ${id}: ${error.message}`);

@@ -42,13 +42,15 @@ type Props = {
   title?: string;
   /** Bredd i procent av behållaren (zoom). */
   widthPct?: number;
+  /** Visa bara detta utsnitt (meter). */
+  view?: { x: number; y: number; w: number; h: number };
   /** Visa den möblerbara golvytan streckad. */
   showArea?: boolean;
 };
 
 export function LayoutDrawing({
   plan, items, colors = {}, names = {}, selected, numbers = true, grid = true, editFixed = false, marquee, svgRef,
-  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100, showArea = false,
+  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100, showArea = false, view,
 }: Props) {
   const W = plan.width;
   const D = plan.depth;
@@ -59,7 +61,7 @@ export function LayoutDrawing({
     for (let x = 1; x < W; x++) lines.push(<line key={`x${x}`} x1={x} y1={0} x2={x} y2={D} stroke={x % 5 ? "#efe7e1" : "#dccfc6"} strokeWidth={0.03} />);
     for (let y = 1; y < D; y++) lines.push(<line key={`y${y}`} x1={0} y1={y} x2={W} y2={y} stroke={y % 5 ? "#efe7e1" : "#dccfc6"} strokeWidth={0.03} />);
   }
-  const fs = Math.max(0.3, Math.min(0.6, Math.max(W, D) / 60));
+  const fs = Math.max(0.3, Math.min(0.6, Math.max(view?.w ?? W, view?.h ?? D) / 60));
 
   const draw = (i: LayoutItem, fixed: boolean) => {
     const sel = selected?.has(i.id);
@@ -71,7 +73,9 @@ export function LayoutDrawing({
     if (i.shape === "round") {
       body = <circle r={i.w / 2} fill={color ?? TABLE_FILL} stroke={sel ? SEL : TABLE_STROKE} strokeWidth={sel ? 0.08 : 0.05} />;
     } else if (i.shape === "chair") {
-      body = <rect x={-0.22} y={-0.2} width={0.44} height={0.4} rx={0.08} fill={sel ? "#93b4f5" : CHAIR_FILL} stroke={sel ? SEL : "#9c8676"} strokeWidth={0.03} />;
+      const cw = Math.min(i.w, 0.7) * 0.88;
+      const cd = Math.min(i.d, 0.7) * 0.8;
+      body = <rect x={-cw / 2} y={-cd / 2} width={cw} height={cd} rx={0.08} fill={sel ? "#93b4f5" : CHAIR_FILL} stroke={sel ? SEL : "#9c8676"} strokeWidth={0.03} />;
     } else {
       const f = color ?? (i.shape === "fixed" ? "#666" : TABLE_FILL);
       body = <rect x={-i.w / 2} y={-i.d / 2} width={i.w} height={i.d} rx={i.shape === "fixed" ? 0 : 0.04} fill={f} stroke={sel ? SEL : i.shape === "fixed" ? "none" : TABLE_STROKE} strokeWidth={sel ? 0.08 : 0.05} />;
@@ -112,7 +116,7 @@ export function LayoutDrawing({
   return (
     <svg
       ref={svgRef}
-      viewBox={`${-pad} ${-pad} ${W + pad * 2} ${D + pad * 2}`}
+      viewBox={view ? `${view.x} ${view.y} ${view.w} ${view.h}` : `${-pad} ${-pad} ${W + pad * 2} ${D + pad * 2}`}
       className={className}
       role="img"
       aria-label={title ?? "Möbleringsritning"}

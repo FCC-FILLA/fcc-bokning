@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { LayoutDrawing } from "@/components/layout-drawing";
 import {
-  GEN_LABEL, countItems, generate, newItem, uid,
+  GEN_LABEL, countItems, focusView, generate, newItem, uid,
   type FurnitureType, type GenKind, type LayoutItem, type RoomPlan,
 } from "@/lib/moblering";
 
@@ -35,7 +35,18 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
   const [area, setArea] = useState(initialPlan.area);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [snap, setSnap] = useState(0.1);
-  const [zoom, setZoom] = useState(1);
+  // Hela våningsplanet är ritat; börja inzoomat på lokalens golvyta (eller det som redan är möblerat).
+  const startView = useMemo(() => focusView(initialPlan, initial, 3), [initialPlan, initial]);
+  const [zoom, setZoom] = useState(() => Math.min(6, Math.max(1, Math.round(((initialPlan.width + 2.4) / startView.w) * 2) / 2)));
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || zoom === 1) return;
+    el.scrollLeft = ((startView.x + 1.2) / (initialPlan.width + 2.4)) * el.scrollWidth;
+    el.scrollTop = ((startView.y + 1.2) / (initialPlan.depth + 2.4)) * el.scrollHeight;
+    // Bara vid start.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [numbers, setNumbers] = useState(true);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [setupId, setSetupId] = useState(fields?.setup_id ?? "");
@@ -239,6 +250,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
               <span aria-hidden className={`inline-block size-4 shrink-0 border border-fg/40 ${t.shape === "round" ? "rounded-full" : "rounded-sm"}`}
                 style={{ background: t.color ?? (t.shape === "chair" ? "#cdbcae" : "#fff") }} />
               <span className="flex-1">{t.name}</span>
+              {t.supplier && <span className="text-[10px] uppercase text-muted">hyrs</span>}
             </button>
           ))}
         </div>
@@ -252,7 +264,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
                 <div className="field col-span-2"><label className="label" htmlFor="plan-w">Ritningens bredd (m)</label>
                   <input className="input" id="plan-w" name="width" type="number" step="0.1" min={2} max={200} defaultValue={dims.width}
                     onBlur={(e) => { const v = Number(e.target.value); if (v >= 2 && v !== dims.width) rescale(v); }} />
-                  <span className="text-xs text-muted">Skalan är uppskattad från stolsbredder och trappsteg i ritningen. Mät en vägg och justera bredden så stämmer allt.</span></div>
+                  <span className="text-xs text-muted">Skalan är räknad från scenpodierna i Stora salen (2 × 1 m). Ändrar du bredden skalas allt om.</span></div>
               </>
             ) : (
               <>
@@ -283,7 +295,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
           <span className="mx-1 h-5 w-px bg-line" />
           <button type="button" className="btn btn-ghost px-2" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} aria-label="Zooma ut">−</button>
           <span className="text-sm tabular-nums w-12 text-center">{Math.round(zoom * 100)} %</span>
-          <button type="button" className="btn btn-ghost px-2" onClick={() => setZoom((z) => Math.min(4, z + 0.5))} aria-label="Zooma in">+</button>
+          <button type="button" className="btn btn-ghost px-2" onClick={() => setZoom((z) => Math.min(6, z + 0.5))} aria-label="Zooma in">+</button>
           <label className="flex items-center gap-1.5 text-sm ml-2">Fäst mot
             <select className="input h-8 py-0 text-sm w-24" value={snap} onChange={(e) => setSnap(Number(e.target.value))}>
               <option value={0}>fritt</option><option value={0.1}>10 cm</option><option value={0.25}>25 cm</option><option value={0.5}>50 cm</option><option value={1}>1 m</option>
@@ -293,7 +305,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
           <span className="flex-1" />
           {dirty && !readOnly && <span className="text-sm text-warn">Ej sparat</span>}
         </div>
-        <div className="card overflow-auto max-h-[78vh] p-0">
+        <div ref={scrollRef} className="card overflow-auto max-h-[78vh] p-0">
           <LayoutDrawing
             plan={plan}
             items={items}
