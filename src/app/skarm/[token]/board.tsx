@@ -71,10 +71,42 @@ export function Board({ feed }: { feed: ScreenFeed }) {
       setShownDays(shown);
     };
     fit();
+    document.fonts?.ready.then(fit); // typsnitten kan ändra höjden när de laddats klart
     const ro = new ResizeObserver(fit);
     ro.observe(box);
     return () => ro.disconnect();
   }, [weekKey]);
+
+  // Dagens lista scrollar inte: texten skalas ner tills alla event får plats.
+  const todayBox = useRef<HTMLDivElement>(null);
+  const todayInner = useRef<HTMLDivElement>(null);
+  const todayKey = spans
+    .map((x) => `${x.event.id}:${new Date(x.start) <= now ? 1 : 0}${new Date(x.end) <= now ? 1 : 0}`)
+    .join(",");
+  useLayoutEffect(() => {
+    const box = todayBox.current;
+    const inner = todayInner.current;
+    if (!box || !inner) return;
+    const fit = () => {
+      inner.style.fontSize = "";
+      if (getComputedStyle(box).overflow === "visible") return;
+      const fits = () => inner.scrollHeight <= box.clientHeight + 1;
+      if (fits()) return;
+      let lo = 0.35, hi = 1;
+      for (let i = 0; i < 8; i++) {
+        const mid = (lo + hi) / 2;
+        inner.style.fontSize = `${mid}em`;
+        if (fits()) lo = mid;
+        else hi = mid;
+      }
+      inner.style.fontSize = `${lo}em`;
+    };
+    fit();
+    document.fonts?.ready.then(fit); // typsnitten kan ändra höjden när de laddats klart
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [todayKey]);
 
   return (
     <div className="skarm">
@@ -106,7 +138,8 @@ export function Board({ feed }: { feed: ScreenFeed }) {
               <Stat value={staff.needed ? `${staff.assigned}/${staff.needed}` : "–"} label="personal bemannad" warn={staff.assigned < staff.needed} />
             </div>
           )}
-          <div className="skarm-scroll">
+          <div className="skarm-fit" ref={todayBox}>
+            <div className="skarm-fitted" ref={todayInner}>
             {spans.length ? (
               spans.map((s) => <TodayCard key={s.event.id} span={s} now={now} today={today} />)
             ) : (
@@ -120,6 +153,7 @@ export function Board({ feed }: { feed: ScreenFeed }) {
                 )}
               </div>
             )}
+            </div>
           </div>
         </section>
 

@@ -39,6 +39,7 @@
 .skarm-sec h2 { font-size: 1.05em; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; color: var(--s-brand-hi); }
 .skarm-sec span { color: var(--s-muted); font-size: .85em; }
 .skarm-fit { overflow: hidden; min-height: 0; flex: 1; }
+.skarm-fitted { display: flex; flex-direction: column; gap: .8em; }
 .skarm-scroll { overflow: auto; min-height: 0; display: flex; flex-direction: column; gap: .8em; scrollbar-width: none; }
 
 .skarm-stats { display: flex; flex-wrap: wrap; gap: 1.8em; margin-bottom: .9em; }
