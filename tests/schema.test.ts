@@ -1081,3 +1081,27 @@ describe("statistik", () => {
     expect(d.by_category).toEqual([{ category: "Eventbyrå", count: 1, value: 10000 }]);
   });
 });
+
+describe("förfrågan från hemsidan", () => {
+  it("skapar förfrågan, kund och kontakt, föreslår ledig lokal och meddelar bokare", async () => {
+    await db.query("update profiles set notify_kinds = notify_kinds || '{forfragan}' where id = $1", [ADMIN]);
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ r: string }>("select submit_inquiry($1) as r", [JSON.stringify({
+        name: "Eva Event", email: "Eva@Firma.se", company: "Firma AB", guests: 40, setup_id: "skol",
+        starts_at: "2030-09-01T09:00:00+02:00", ends_at: "2030-09-01T16:00:00+02:00", message: "Kickoff", event_type_id: "konferens",
+      })]);
+      expect(r.rows[0].r).toBe("ok");
+      const bad = await db.query<{ r: string }>("select submit_inquiry($1) as r", [JSON.stringify({ name: "X", email: "nej", starts_at: "2030-09-01T09:00:00+02:00", ends_at: "2030-09-01T10:00:00+02:00" })]);
+      expect(bad.rows[0].r).toBe("kontakt");
+    } finally {
+      await db.exec("reset role");
+    }
+    const ev = await db.query<{ status: string; participants: number; company: string; contact_email: string; internal_notes: string }>(
+      "select e.status::text, e.participants, c.name as company, ct.email as contact_email, e.internal_notes from events e join companies c on c.id = e.company_id join contacts ct on ct.id = e.contact_id where e.title like 'Konferens – Firma AB'");
+    expect(ev.rows[0]).toMatchObject({ status: "forfragan", participants: 40, company: "Firma AB", contact_email: "eva@firma.se" });
+    expect(ev.rows[0].internal_notes).toContain("Lediga lokaler som passar");
+    const n = await db.query<{ title: string }>("select title from notifications where profile_id = $1 and kind = 'forfragan'", [ADMIN]);
+    expect(n.rows.map((x) => x.title)).toEqual(["Ny förfrågan: Firma AB"]);
+  });
+});
