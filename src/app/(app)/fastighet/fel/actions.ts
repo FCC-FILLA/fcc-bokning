@@ -16,8 +16,8 @@ export async function updateIssue(id: string, fd: FormData) {
     resolution: String(fd.get("resolution") ?? "").trim().slice(0, 2000) || null,
     resolved_at: status === "klar" ? new Date().toISOString() : null,
   }).eq("id", id);
-  revalidatePath("/lokaler/fel");
-  redirect(`/lokaler/fel${fd.get("back") ? `?${fd.get("back")}` : ""}#${id}`);
+  revalidatePath("/fastighet/fel");
+  redirect(`/fastighet/fel${fd.get("back") ? `?${fd.get("back")}` : ""}#${id}`);
 }
 
 /** Planerare lägger in ett fel själva. */
@@ -25,10 +25,10 @@ export async function createIssue(fd: FormData) {
   await requireStaffManager();
   const room = String(fd.get("room_id") ?? "");
   const title = String(fd.get("title") ?? "").trim().slice(0, 200);
-  if (!/^[0-9a-f-]{36}$/i.test(room) || !title) redirect(`/lokaler/fel?fel=${encodeURIComponent("Välj lokal och skriv vad som är fel.")}`);
+  if (!/^[0-9a-f-]{36}$/i.test(room) || !title) redirect(`/fastighet/fel?fel=${encodeURIComponent("Välj lokal och skriv vad som är fel.")}`);
   const supabase = await createClient();
   const { data: me } = await supabase.auth.getUser();
   await supabase.from("room_issues").insert({ room_id: room, title, description: String(fd.get("description") ?? "").trim() || null, reporter_name: me.user?.email ?? null });
-  revalidatePath("/lokaler/fel");
-  redirect("/lokaler/fel");
+  revalidatePath("/fastighet/fel");
+  redirect("/fastighet/fel");
 }

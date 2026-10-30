@@ -267,10 +267,10 @@ export default async function DashboardPage() {
           )}
 
           {newIssues.length > 0 && (
-            <Todo title={`Nya felanmälningar (${newIssues.length})`} href="/lokaler/fel">
+            <Todo title={`Nya felanmälningar (${newIssues.length})`} href="/fastighet/fel">
               {newIssues.slice(0, 4).map((x) => (
                 <li key={x.id}>
-                  <Link className="font-semibold hover:underline" href={`/lokaler/fel#${x.id}`}>{x.title}</Link>
+                  <Link className="font-semibold hover:underline" href={`/fastighet/fel#${x.id}`}>{x.title}</Link>
                   <span className="block text-muted">{x.rooms?.name}, {fmtDate(x.created_at)}</span>
                 </li>
               ))}

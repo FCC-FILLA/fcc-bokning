@@ -1232,3 +1232,26 @@ describe("månadsfakturering", () => {
     });
   });
 });
+
+describe("fastighet", () => {
+  it("utförd tillsyn loggas och nästa datum räknas fram, försenade ger notis en gång", async () => {
+    const t = (await db.query<{ id: string }>("insert into maintenance_tasks (title, interval_days, next_due_on) values ('Testkontroll', 30, current_date - 3) returning id")).rows[0].id;
+    expect(await db.query<{ n: number }>("select remind_maintenance() as n").then((r) => r.rows[0].n)).toBeGreaterThan(0);
+    const before = (await db.query<{ n: number }>("select count(*)::int as n from notifications where title like 'Tillsyn att göra: Testkontroll%'")).rows[0].n;
+    await db.query("select remind_maintenance()");
+    const after = (await db.query<{ n: number }>("select count(*)::int as n from notifications where title like 'Tillsyn att göra: Testkontroll%'")).rows[0].n;
+    expect(after).toBe(before);
+    await asUser(ADMIN, () => db.query("select maintenance_done($1, '2031-05-01', false, 'Plomb bruten')", [t]));
+    const r = await db.query<{ next: string; last: string }>("select next_due_on::text as next, last_done_on::text as last from maintenance_tasks where id = $1", [t]);
+    expect(r.rows[0]).toEqual({ next: "2031-05-31", last: "2031-05-01" });
+    const log = await db.query<{ ok: boolean; note: string }>("select ok, note from maintenance_log where task_id = $1", [t]);
+    expect(log.rows).toEqual([{ ok: false, note: "Plomb bruten" }]);
+  });
+
+  it("läsare kan läsa men inte ändra", async () => {
+    await asUser(LASARE, async () => {
+      expect((await db.query("select * from meters")).rows.length).toBeGreaterThan(0);
+      await expect(db.query("insert into suppliers (name) values ('Nej')")).rejects.toThrow();
+    });
+  });
+});

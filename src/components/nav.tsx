@@ -15,7 +15,6 @@ const SECTIONS: Section[] = [
       { href: "/", label: "Översikt" },
       { href: "/uppgifter", label: "Mina uppgifter" },
       { href: "/notiser", label: "Notiser" },
-      { href: "/lokaler/fel", label: "Felanmälningar" },
     ],
   },
   {
@@ -51,7 +50,19 @@ const SECTIONS: Section[] = [
       { href: "/personal/personer", label: "Personer" },
       { href: "/personal/funktioner", label: "Funktioner" },
       { href: "/personal/info", label: "Info till personalen" },
+    ],
+  },
+  {
+    id: "fastighet",
+    label: "Fastighet",
+    href: "/fastighet",
+    items: [
+      { href: "/fastighet", label: "Översikt" },
+      { href: "/fastighet/fel", label: "Felanmälningar" },
+      { href: "/fastighet/underhall", label: "Tillsyn och underhåll" },
       { href: "/personal/rutiner", label: "Öppna och stänga" },
+      { href: "/fastighet/matare", label: "Mätarställningar" },
+      { href: "/fastighet/leverantorer", label: "Leverantörer och avtal" },
     ],
   },
   {
@@ -88,7 +99,7 @@ const SETTINGS: Section = {
   ],
 };
 
-const matches = (path: string, href: string) => (href === "/" || href === "/installningar" ? path === href : path === href || path.startsWith(`${href}/`));
+const matches = (path: string, href: string) => (href === "/" || href === "/installningar" || href === "/fastighet" ? path === href : path === href || path.startsWith(`${href}/`));
 
 /** Vilken undersida (och därmed sektion) som är aktiv: den längsta adress som matchar. */
 function locate(path: string) {

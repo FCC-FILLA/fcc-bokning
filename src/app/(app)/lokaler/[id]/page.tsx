@@ -156,7 +156,7 @@ export default async function RoomPage({
             <div className="w-48 [&_svg]:h-auto [&_svg]:w-full" dangerouslySetInnerHTML={{ __html: qr }} />
             <a className="text-xs text-muted underline break-all" href={cardUrl} target="_blank" rel="noreferrer">Öppna lokalkortet</a>
             <Link className="btn text-sm" href={`/lokaler/${id}/skylt`} target="_blank">Skriv ut skylt</Link>
-            <Link className="text-sm hover:underline" href={`/lokaler/fel?lokal=${id}`}>Felanmälningar{openIssues ? ` (${openIssues} öppna)` : ""}</Link>
+            <Link className="text-sm hover:underline" href={`/fastighet/fel?lokal=${id}`}>Felanmälningar{openIssues ? ` (${openIssues} öppna)` : ""}</Link>
             {admin && (
               <form action={newRoomCardToken.bind(null, id)}>
                 <ConfirmButton label="Ny QR-kod" question="Den gamla QR-koden slutar fungera. Fortsätta?" confirmLabel="Ja" className="btn btn-ghost text-xs" />
