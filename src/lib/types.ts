@@ -81,6 +81,11 @@ export type EventRow = {
   responsible_id: string | null;
   participants: number | null;
   option_expires_on: string | null;
+  option_token?: string;
+  option_reminded_at?: string | null;
+  customer_response?: "vill_boka" | "slapper" | null;
+  customer_response_at?: string | null;
+  customer_response_name?: string | null;
   description: string | null;
   technical_info: string | null;
   hospitality_info: string | null;

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Förnyar inloggningen vid varje sidladdning och skickar utloggade till inloggningssidan.
 // Kundens offertlänkar (/offert/...) är öppna utan inloggning.
-const PUBLIC_PATHS = ["/logga-in", "/auth/confirm", "/offert/", "/kalender/", "/pass/", "/event/", "/sw.js", "/manifest.webmanifest"];
+const PUBLIC_PATHS = ["/logga-in", "/auth/confirm", "/offert/", "/kalender/", "/pass/", "/event/", "/option/", "/forfragan", "/lokal/", "/sw.js", "/manifest.webmanifest"];
 
 export async function proxy(request: NextRequest) {
   // Sidans adress, så att layouter kan veta var användaren är (t.ex. för att styra personal till portalen).

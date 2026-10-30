@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Booking, BookingConflict, ChangeoverWarning, EventRow } from "@/lib/types";
 import { BookingFields } from "@/components/booking-fields";
 import { ConfirmButton } from "@/components/confirm-button";
+import { CopyButton } from "@/components/copy-button";
 import { EventFields } from "@/components/event-fields";
 import { History } from "@/components/history";
 import { StatusPill } from "@/components/status-pill";
@@ -22,7 +23,7 @@ import { EventTabs } from "@/components/event-tabs";
 import { EventInvoicing } from "@/components/event-invoicing";
 import { saveEventAsTemplate } from "../../mallar/actions";
 import {
-  addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, moveOption, updateBooking, updateEvent,
+  addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, moveOption, sendOptionReminder, updateBooking, updateEvent,
 } from "../actions";
 
 type QueueRow = { event_id: string; title: string; status: EventRow["status"]; company_name: string | null; option_expires_on: string | null; place: number };
@@ -34,7 +35,7 @@ export default async function EventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string; optionskickad?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -53,6 +54,8 @@ export default async function EventPage({
   // För kort omställning före eller efter någon av evenemangets bokningar.
   const { data: coData } = await supabase.from("changeover_warnings").select("*").or(`event_id.eq.${id},next_event_id.eq.${id}`);
   const changeovers = (coData ?? []) as ChangeoverWarning[];
+  const { data: siteRow } = await supabase.from("app_settings").select("value").eq("key", "site_url").maybeSingle();
+  const site = siteRow?.value || "https://fcc-bokning.vercel.app";
   const queue = (queueData ?? []) as QueueRow[];
   const myPlace = queue.find((x) => x.event_id === id)?.place;
   if (!event) notFound();
@@ -100,8 +103,27 @@ export default async function EventPage({
           {company && <Link className="text-sm text-muted hover:underline" href={`/kunder/${company.id}`}>{company.name}</Link>}
         </div>
         {ev.status === "preliminar" && ev.option_expires_on && (
-          <p className="text-sm text-st-preliminar">Optionen gäller till {fmtDate(ev.option_expires_on)}.</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span className="text-st-preliminar">Optionen gäller till {fmtDate(ev.option_expires_on)}.</span>
+            {ev.customer_response === "vill_boka" ? (
+              <span className="rounded-full bg-st-genomford-soft px-2 py-0.5 text-xs font-semibold text-ok">
+                Kunden vill boka{ev.customer_response_name ? ` (${ev.customer_response_name})` : ""}{ev.customer_response_at ? `, ${fmtDate(ev.customer_response_at)}` : ""}
+              </span>
+            ) : ev.option_reminded_at ? (
+              <span className="text-muted">Påminnelse skickad {fmtDate(ev.option_reminded_at)}, inget svar ännu.</span>
+            ) : (
+              <span className="text-muted">Kunden får en påminnelse automatiskt några dagar före.</span>
+            )}
+            {booker && ev.customer_response !== "vill_boka" && (
+              <form action={sendOptionReminder.bind(null, id)}>
+                <ConfirmButton label={ev.option_reminded_at ? "Skicka igen" : "Skicka nu"} question="Mejla kunden en länk där de kan bekräfta eller släppa optionen?" confirmLabel="Skicka" className="btn btn-ghost text-sm px-2" />
+              </form>
+            )}
+            {ev.option_token && <CopyButton text={`${site}/option/${ev.option_token}`} label="Kopiera optionslänk" />}
+          </div>
         )}
+        {ev.customer_response === "slapper" && <p className="text-sm text-muted">Kunden släppte optionen{ev.customer_response_at ? ` ${fmtDate(ev.customer_response_at)}` : ""}.</p>}
+        {sp.optionskickad && <p className="text-sm text-ok">Mejlet till kunden ligger i kön.</p>}
       </div>
 
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}

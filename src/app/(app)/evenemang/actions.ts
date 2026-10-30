@@ -7,6 +7,7 @@ import { requireBooker } from "@/lib/auth";
 import { daysBetween, expandRows, minutes, parseRows, shiftIso } from "@/lib/bokning";
 import { addDays, isoToDate, localToIso } from "@/lib/datum";
 import { createClient } from "@/lib/supabase/server";
+import { kickMail } from "@/lib/epost";
 import { STATUSES } from "@/lib/types";
 
 const opt = (v: FormDataEntryValue | null) => {
@@ -236,4 +237,14 @@ export async function moveOption(eventId: string, targetId: string, dir: "upp" |
   }
   revalidatePath("/", "layout");
   redirect(`/evenemang/${eventId}#optioner`);
+}
+
+/** Skickar optionsmejlet till kundens kontakt nu (annars går det automatiskt några dagar före). */
+export async function sendOptionReminder(eventId: string) {
+  await requireBooker();
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("send_option_reminder", { p_event: eventId });
+  await kickMail();
+  revalidatePath(`/evenemang/${eventId}`);
+  redirect(`/evenemang/${eventId}?${data ? "optionskickad=1" : err("Det gick inte. Evenemanget behöver vara preliminärt, ha ett optionsdatum och en kontakt med e-post.")}`);
 }

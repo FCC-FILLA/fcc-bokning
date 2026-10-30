@@ -986,3 +986,33 @@ describe("personalens tillgänglighet", () => {
     expect(why.rows[0].r).toBe("Ledig: Semester");
   });
 });
+
+describe("optionsbevakning", () => {
+  it("påminner kunden, och när kunden släpper får nästa i kön besked", async () => {
+    const c = await db.query<{ id: string }>("insert into contacts (name, email) values ('Anna Kund', 'anna@kund.se'), ('Bo Nästa', 'bo@nasta.se') returning id");
+    const first = await book("Option ett", "preliminar", "Birka", "2099-05-10T09:00+02", "2099-05-10T17:00+02");
+    const second = await book("Option två", "preliminar", "Birka", "2099-05-10T10:00+02", "2099-05-10T15:00+02");
+    await db.query("update events set contact_id = $2, responsible_id = $3, option_expires_on = current_date + 2 where id = $1", [first, c.rows[0].id, ADMIN]);
+    await db.query("update events set contact_id = $2, created_at = now() + interval '1 second' where id = $1", [second, c.rows[1].id]);
+    await db.query("update profiles set notify_kinds = '{option}' where id = $1", [ADMIN]);
+    const n = await db.query<{ n: number }>("select remind_options() as n");
+    expect(n.rows[0].n).toBeGreaterThanOrEqual(1);
+    const m1 = await db.query<{ to_email: string; link: string }>("select to_email, link from email_outbox where event_id = $1 and kind = 'option'", [first]);
+    expect(m1.rows.map((x) => x.to_email)).toEqual(["anna@kund.se"]);
+    const tok = m1.rows[0].link.split("/option/")[1];
+    await db.exec("set role anon");
+    try {
+      const info = await db.query<{ d: { title: string } }>("select option_info($1) as d", [tok]);
+      expect(info.rows[0].d.title).toBe("Option ett");
+      expect((await db.query<{ r: string }>("select option_respond($1, 'slapper', 'Anna') as r", [tok])).rows[0].r).toBe("ok");
+    } finally {
+      await db.exec("reset role");
+    }
+    const st = await db.query<{ status: string }>("select status::text from events where id = $1", [first]);
+    expect(st.rows[0].status).toBe("avbokad");
+    const m2 = await db.query<{ to_email: string }>("select to_email from email_outbox where event_id = $1 and kind = 'option'", [second]);
+    expect(m2.rows.map((x) => x.to_email)).toEqual(["bo@nasta.se"]);
+    const notes = await db.query<{ title: string }>("select title from notifications where profile_id = $1 and kind = 'option' order by created_at", [ADMIN]);
+    expect(notes.rows.map((x) => x.title)).toContain("Kunden släppte optionen: Option ett");
+  });
+});
