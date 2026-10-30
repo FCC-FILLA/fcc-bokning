@@ -13,7 +13,8 @@
 
   position: fixed; inset: 0;
   display: grid; grid-template-rows: auto 1fr auto; gap: 1.1em;
-  padding: 1.2em max(1.4em, env(safe-area-inset-right, 0px)) 1em max(1.4em, env(safe-area-inset-left, 0px));
+  /* Marginal mot TV:ns överskanning (kanterna som TV:n skär bort): ca 5 % på sidorna, 4 % upptill och nedtill. */
+  padding: max(4vh, 1.2em) max(5vw, 1.4em, env(safe-area-inset-right, 0px)) max(4vh, 1em) max(5vw, 1.4em, env(safe-area-inset-left, 0px));
   background: var(--s-bg); color: var(--s-fg);
   font-family: var(--font-sans); font-size: clamp(14px, 1.05vw, 24px); line-height: 1.35;
   color-scheme: dark; overflow: hidden;
@@ -109,7 +110,7 @@
 
 /* Mobil eller smal skärm: allt under varandra och sidan scrollar. */
 @media (max-width: 900px) {
-  .skarm { position: static; min-height: 100dvh; overflow: visible; }
+  .skarm { position: static; min-height: 100dvh; overflow: visible; padding: 1.2em max(16px, env(safe-area-inset-right, 0px)) 1em max(16px, env(safe-area-inset-left, 0px)); }
   .skarm-main { grid-template-columns: 1fr; }
   .skarm-scroll { overflow: visible; }
   .skarm-time { font-size: 2.4em; }
