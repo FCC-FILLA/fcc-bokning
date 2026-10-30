@@ -15,7 +15,7 @@ import { addMyUnavailability, apply, checkMyRoutine, signMyRoutine, removeMyUnav
 export const metadata: Metadata = {
   title: "Mina pass",
   manifest: "/manifest.webmanifest",
-  icons: { apple: "/apple-icon.png", icon: "/icon-192.png" },
+  icons: { apple: "/apple-icon.png?v=2", icon: "/icon-192.png?v=2" },
   appleWebApp: { capable: true, title: "FCC Personal", statusBarStyle: "default" },
 };
 export const viewport: Viewport = { themeColor: "#60272b" };
