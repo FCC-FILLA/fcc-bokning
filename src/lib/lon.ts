@@ -10,13 +10,15 @@ export type ObSettings = {
   hourlyTitle: string;          // raden för alla arbetade timmar ("Timlön")
   evening: ObRule & { from: string; to: string };
   night: ObRule & { from: string; to: string };
-  weekend: ObRule;              // lör, sön och helgdagar (hela dygnet)
+  weekend: ObRule;              // lör–sön hela dygnet samt helgdagar enligt avtalet
 };
 
 export const DEFAULT_OB: ObSettings = {
   hourlyTitle: "Timlön",
-  evening: { code: "413", title: "OB Vardag Kväll", from: "18:00", to: "22:00" },
-  night: { code: "414", title: "OB Vardag Natt", from: "22:00", to: "06:00" },
+  // Kollektivavtal Trossamfund (Arbetsgivaralliansen) § 7: mån–fre 18–24 och 00–07,
+  // lör 07–sön 24 (FCC räknar även lör 00–07 som helg, "OB helg inkl natt lör-sön").
+  evening: { code: "413", title: "OB Vardag Kväll", from: "18:00", to: "00:00" },
+  night: { code: "414", title: "OB Vardag Natt", from: "00:00", to: "07:00" },
   weekend: { code: "416", title: "OB Helg" },
 };
 
@@ -60,13 +62,17 @@ function easter(y: number) {
 /** Första datumet från `from` som är en viss veckodag (0 = måndag). */
 const firstWeekday = (from: string, wd: number) => addDays(from, (wd - weekday(from) + 7) % 7);
 
-const holidayCache = new Map<number, Set<string>>();
-/** Svenska helgdagar och helgaftnar som räknas som helg för OB. */
-export function holidays(y: number): Set<string> {
+const holidayCache = new Map<number, Map<string, number>>();
+/**
+ * Helgdagar och aftnar enligt avtalet → minut på dygnet då helg-OB börjar.
+ * Trettondagen, 1 maj, Kristi himmelsfärd, 6 juni, alla helgons dag och pingst-, midsommar-,
+ * jul- och nyårsafton från kl. 07; skärtorsdagen från kl. 18. Därefter helg till första vardagen.
+ */
+export function holidays(y: number): Map<string, number> {
   const hit = holidayCache.get(y);
   if (hit) return hit;
   const e = easter(y);
-  const set = new Set([
+  const from7 = [
     `${y}-01-01`, `${y}-01-06`,
     addDays(e, -2), addDays(e, -1), e, addDays(e, 1), // långfredag, påskafton, påskdagen, annandag påsk
     `${y}-05-01`, addDays(e, 39), `${y}-06-06`,       // 1 maj, Kristi himmelsfärd, nationaldagen
@@ -74,16 +80,26 @@ export function holidays(y: number): Set<string> {
     firstWeekday(`${y}-06-19`, 4), firstWeekday(`${y}-06-20`, 5), // midsommarafton, midsommardagen
     firstWeekday(`${y}-10-31`, 5),                    // alla helgons dag
     `${y}-12-24`, `${y}-12-25`, `${y}-12-26`, `${y}-12-31`,
-  ]);
-  holidayCache.set(y, set);
-  return set;
+  ];
+  const map = new Map(from7.map((d) => [d, 7 * 60]));
+  map.set(addDays(e, -3), 18 * 60); // skärtorsdagen
+  holidayCache.set(y, map);
+  return map;
 }
 
-const isHoliday = (date: string) => weekday(date) >= 5 || holidays(Number(date.slice(0, 4))).has(date);
+const holidayStart = (date: string) => holidays(Number(date.slice(0, 4))).get(date);
+
+/** Helg-OB: lör–sön hela dygnet; helgdag från kl. 07 (hela dygnet om dagen före också var helgdag). */
+function isWeekendOb(date: string, min: number) {
+  if (weekday(date) >= 5) return true;
+  const start = holidayStart(date);
+  if (start == null) return false;
+  return holidayStart(addDays(date, -1)) != null || min >= start;
+}
 
 /**
  * OB-timmar för ett pass. Varje minut av arbetspasset klassas i svensk tid:
- * helg (lör, sön, helgdagar) går före natt som går före kväll. Rasten dras av
+ * helg går före natt som går före kväll. Rasten dras av
  * proportionerligt, så summan av OB aldrig blir mer än de arbetade timmarna.
  */
 export function obHours(startIso: string, endIso: string, breakMinutes: number, s: ObSettings) {
@@ -96,7 +112,7 @@ export function obHours(startIso: string, endIso: string, breakMinutes: number, 
     const local = localStamp(start + i * 60_000); // "2026-10-09 18:30"
     const date = local.slice(0, 10);
     const min = toMin(local.slice(-5));
-    if (isHoliday(date)) out.weekend++;
+    if (isWeekendOb(date, min)) out.weekend++;
     else if (inWindow(min, s.night.from, s.night.to)) out.night++;
     else if (inWindow(min, s.evening.from, s.evening.to)) out.evening++;
   }

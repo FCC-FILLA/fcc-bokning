@@ -145,7 +145,7 @@ export default async function TimePage({
             <summary className="cursor-pointer text-sm font-medium">Lönearter och OB-tider</summary>
             <form action={savePayrollOb.bind(null, month)} className="mt-3 space-y-3">
               <p className="text-xs text-muted">
-                Löneunderlaget får en rad med alla arbetade timmar per person och en rad per OB-löneart. Lör, sön och helgdagar (inkl. påsk-, midsommar-, jul- och nyårsafton) räknas som helg hela dygnet. Rasten dras av proportionerligt.
+                Löneunderlaget får en rad med alla arbetade timmar per person och en rad per OB-löneart. Enligt kollektivavtalet (Trossamfund § 7): lör–sön räknas som helg hela dygnet, helgdagar och påsk-, pingst-, midsommar-, jul- och nyårsafton från kl. 07 (skärtorsdagen från kl. 18). Till-tiden 00:00 betyder midnatt. Rasten dras av proportionerligt.
               </p>
               <div className="field w-48"><label className="label" htmlFor="hourly_title">Titel för timlön</label><input className="input" id="hourly_title" name="hourly_title" defaultValue={ob.hourlyTitle} /></div>
               {([["evening", ob.evening, true], ["night", ob.night, true], ["weekend", ob.weekend, false]] as const).map(([k, r, times]) => (
@@ -159,7 +159,7 @@ export default async function TimePage({
                       <span className="text-xs text-muted pb-2">vardagar</span>
                     </>
                   ) : (
-                    <span className="text-xs text-muted pb-2">hela dygnet lör, sön och helgdagar</span>
+                    <span className="text-xs text-muted pb-2">lör–sön hela dygnet samt helgdagar (från kl. 07, skärtorsdag från 18)</span>
                   )}
                 </div>
               ))}
