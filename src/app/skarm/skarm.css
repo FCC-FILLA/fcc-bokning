@@ -9,7 +9,7 @@
   --s-muted: rgba(255, 255, 255, .74);
   --s-brand: #ffffff;
   --s-brand-hi: #ffffff;
-  --s-live: #8fe6b3;
+  --s-live: #ffffff;                       /* pågår nu */
   --s-warn: #ffd27a;
 
   position: fixed; inset: 0;
@@ -63,7 +63,7 @@
 .skarm-pill { display: inline-flex; align-items: center; gap: .4em; padding: .3em .7em; border-radius: 99px; background: var(--s-panel-2); font-family: var(--font-sans); font-size: .55em; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
 .skarm-pill i { width: .7em; height: .7em; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1.5px #fff; }
 .skarm-pill.is-prel { background: transparent; border: 1px dashed var(--s-warn); color: var(--s-warn); }
-.skarm-pill.is-now { background: var(--s-live); color: #0c2416; }
+.skarm-pill.is-now { background: var(--s-live); color: var(--s-bg); }
 .skarm-pill { border: 1px solid var(--s-line); }
 @media (prefers-reduced-motion: no-preference) {
   .skarm-pill.is-now { animation: skarm-pulse 2.4s ease-in-out infinite; }
@@ -110,7 +110,8 @@
 .skarm-room span { font-size: .72em; color: var(--s-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .skarm-room.is-next { background: var(--s-panel-2); border-color: var(--s-line); }
 .skarm-room.is-live { background: var(--s-panel-2); border-color: var(--s-live); }
-.skarm-room.is-live span { color: var(--s-live); }
+.skarm-room.is-live { box-shadow: inset 0 0 0 1px var(--s-live); }
+.skarm-room.is-live span { color: var(--s-live); font-weight: 600; }
 .skarm-src { color: var(--s-muted); font-size: .72em; }
 
 /* Mobil eller smal skärm: allt under varandra och sidan scrollar. */
