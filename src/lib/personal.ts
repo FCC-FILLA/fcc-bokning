@@ -26,6 +26,7 @@ export type Staff = {
   email: string | null;
   phone: string | null;
   company: string | null;
+  employment_number?: string | null;
   hourly_rate: number | null;
   active: boolean;
   note: string | null;

@@ -5,9 +5,9 @@ import { redirect } from "next/navigation";
 import { isAdmin, requireStaffManager } from "@/lib/auth";
 import { localToIso } from "@/lib/datum";
 import { kickMail } from "@/lib/epost";
-import { fmtKr } from "@/lib/offert";
 import { monthLabel, monthRange } from "@/lib/personal";
-import { buildMonthWorkbook } from "@/lib/tid-excel";
+import { buildMonthWorkbook, buildPayrollWorkbook } from "@/lib/tid-excel";
+import { DEFAULT_OB, type ObSettings } from "@/lib/lon";
 import { notify } from "@/lib/push";
 import { createClient } from "@/lib/supabase/server";
 
@@ -85,17 +85,17 @@ async function queuePayrollMail(month: string, who: string) {
   const { data: setting } = await supabase.from("app_settings").select("value").eq("key", "payroll_email").maybeSingle();
   const to = String(setting?.value ?? "").trim();
   if (!to) return false;
-  const { buffer, summary } = await buildMonthWorkbook(supabase, month);
-  const name = `Tidsunderlag-${month}.xlsx`;
-  const path = `${month}/${Date.now()}-${name}`;
+  const [{ summary }, { buffer }] = await Promise.all([buildMonthWorkbook(supabase, month), buildPayrollWorkbook(supabase, month)]);
+  const name = `Löneunderlag-${month}.xlsx`;
+  const path = `${month}/${Date.now()}-Loneunderlag-${month}.xlsx`;
   const { error } = await supabase.storage
     .from("underlag")
     .upload(path, buffer, { contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   if (error) return false;
   await supabase.from("email_outbox").insert({
     to_email: to,
-    subject: `Tidsunderlag ${monthLabel(month)}`,
-    body: `Hej!\n\nHär kommer attesterat tidsunderlag för ${monthLabel(month)}: ${summary.shifts} pass, ${summary.hours.toLocaleString("sv-SE")} timmar, ${fmtKr(summary.amount)}.\n\nExcel-filen är bifogad. Månaden låstes av ${who}.\n\nFCC Bokning`,
+    subject: `Löneunderlag ${monthLabel(month)}`,
+    body: `Hej!\n\nHär kommer löneunderlag för ${monthLabel(month)}: ${summary.shifts} attesterade pass, ${summary.hours.toLocaleString("sv-SE")} timmar.\n\nExcel-filen är bifogad i lönesystemets importformat (timlön och OB per person). Månaden låstes av ${who}.\n\nFCC Bokning`,
     kind: "lon",
     attachment_path: path,
     attachment_name: name,
@@ -120,6 +120,26 @@ export async function savePayrollEmail(month: string, fd: FormData) {
   const email = String(fd.get("payroll_email") ?? "").trim().slice(0, 200);
   const supabase = await createClient();
   await supabase.from("app_settings").upsert({ key: "payroll_email", value: email, updated_at: new Date().toISOString() });
+  revalidatePath("/personal/tid");
+  back(month, "sparad=1");
+}
+
+export async function savePayrollOb(month: string, fd: FormData) {
+  const me = await requireStaffManager();
+  if (!isAdmin(me)) back(month, `fel=${encodeURIComponent("Bara administratörer kan ändra OB-reglerna.")}`);
+  const t = (k: string, d: string) => {
+    const v = String(fd.get(k) ?? "").trim();
+    return /^\d{1,2}:\d{2}$/.test(v) ? v.padStart(5, "0") : d;
+  };
+  const c = (k: string) => String(fd.get(k) ?? "").trim().slice(0, 20);
+  const value: ObSettings = {
+    hourlyTitle: c("hourly_title") || DEFAULT_OB.hourlyTitle,
+    evening: { code: c("evening_code"), title: c("evening_title") || DEFAULT_OB.evening.title, from: t("evening_from", DEFAULT_OB.evening.from), to: t("evening_to", DEFAULT_OB.evening.to) },
+    night: { code: c("night_code"), title: c("night_title") || DEFAULT_OB.night.title, from: t("night_from", DEFAULT_OB.night.from), to: t("night_to", DEFAULT_OB.night.to) },
+    weekend: { code: c("weekend_code"), title: c("weekend_title") || DEFAULT_OB.weekend.title },
+  };
+  const supabase = await createClient();
+  await supabase.from("app_settings").upsert({ key: "payroll_ob", value: JSON.stringify(value), updated_at: new Date().toISOString() });
   revalidatePath("/personal/tid");
   back(month, "sparad=1");
 }
