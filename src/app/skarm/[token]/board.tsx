@@ -56,11 +56,10 @@ export function Board({ feed }: { feed: ScreenFeed }) {
     <div className="skarm">
       <header className="skarm-head">
         <div className="skarm-brand">
-          <span className="skarm-mark">FCC</span>
-          <div>
-            <h1>Filadelfia Convention Center</h1>
-            <p>Event idag och veckan framåt</p>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/fcc-logo-white.svg" alt="" width={380} height={96} className="skarm-logo" />
+          <h1 className="sr-only">Filadelfia Convention Center</h1>
+          <p>Event idag och veckan framåt</p>
         </div>
         <div className="skarm-clock">
           <div className="skarm-time">{time}</div>
