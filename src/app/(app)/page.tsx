@@ -2,7 +2,7 @@ import Link from "next/link";
 import { canBook, canManageStaff, requireProfile } from "@/lib/auth";
 import { loadEventTypes } from "@/lib/typer";
 import {
-  addDays, dayShort, dayStartIso, fmtDate, fmtDayMonth, fmtTime, isoToDate, todayDate,
+  addDays, dayShort, dayStartIso, fmtDate, fmtDayMonth, fmtMinutes, fmtTime, isoToDate, todayDate,
 } from "@/lib/datum";
 import { QUOTE_STATUS_LABEL, fmtKr } from "@/lib/offert";
 import { createClient } from "@/lib/supabase/server";
@@ -141,7 +141,14 @@ export default async function DashboardPage() {
     .map((x) => ({ ...x, filled: x.shift_assignments.filter((a) => a.status === "tilldelad").length, pending: x.shift_assignments.filter((a) => a.status === "inbjuden" || a.status === "ansokt").length }))
     .filter((x) => x.filled < x.needed);
   const missingPeople = understaffed.reduce((n, x) => n + x.needed - x.filled, 0);
-  const actionCount = conflicts.length + options.length + expiredSent.length + oldInquiries.length + understaffed.length;
+  // För kort omställning och möbler som inte räcker de närmaste 30 dagarna.
+  const [{ data: coData }, { data: furnData }] = await Promise.all([
+    supabase.from("changeover_warnings").select("booking_id, next_booking_id, event_id, event_title, next_event_id, next_event_title, room_name, ends_at, gap_minutes, needed_minutes").gte("next_starts_at", nowIso).lt("next_starts_at", dayStartIso(addDays(today, 30))).order("ends_at").limit(20),
+    supabase.rpc("furniture_by_day", { p_from: today, p_to: addDays(today, 30) }),
+  ]);
+  const shortChanges = (coData ?? []) as { booking_id: string; next_booking_id: string; event_id: string; event_title: string; next_event_id: string; next_event_title: string; room_name: string; ends_at: string; gap_minutes: number; needed_minutes: number }[];
+  const shortages = ((furnData ?? []) as { day: string; furniture_id: string; name: string; needed: number; stock: number | null }[]).filter((x) => x.stock != null && x.needed > x.stock);
+  const actionCount = conflicts.length + options.length + expiredSent.length + oldInquiries.length + understaffed.length + shortChanges.length + shortages.length;
 
   // Kommande veckan: ett evenemang per dag med tider och lokaler.
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i));
@@ -252,6 +259,30 @@ export default async function DashboardPage() {
                   {" och "}
                   <Link className="font-semibold hover:underline" href={`/evenemang/${c.other_event_id}`}>{c.other_event_title}</Link>
                   <span className="block text-muted">{c.room_name} / {c.other_room_name}, {fmtDate(c.starts_at)}</span>
+                </li>
+              ))}
+            </Todo>
+          )}
+
+          {shortChanges.length > 0 && (
+            <Todo title={`För kort omställning (${shortChanges.length})`} href="/krockar#omstallning">
+              {shortChanges.slice(0, 4).map((c) => (
+                <li key={c.booking_id + c.next_booking_id}>
+                  <Link className="font-semibold hover:underline" href={`/evenemang/${c.event_id}`}>{c.event_title}</Link>
+                  {" → "}
+                  <Link className="font-semibold hover:underline" href={`/evenemang/${c.next_event_id}`}>{c.next_event_title}</Link>
+                  <span className="block text-muted">{c.room_name}, {fmtDate(c.ends_at)}: {fmtMinutes(c.gap_minutes)} emellan, behövs {fmtMinutes(c.needed_minutes)}</span>
+                </li>
+              ))}
+            </Todo>
+          )}
+
+          {shortages.length > 0 && (
+            <Todo title={`Möbler som inte räcker (${shortages.length})`} href="/mobleringar/lager">
+              {shortages.slice(0, 4).map((x) => (
+                <li key={x.day + x.furniture_id}>
+                  <span className="font-semibold">{x.name}</span> {fmtDate(x.day)}
+                  <span className="block text-warn">Ritningarna kräver {x.needed}, ni har {x.stock}</span>
                 </li>
               ))}
             </Todo>

@@ -914,3 +914,23 @@ describe("omställning och rigg/riv", () => {
     expect(await w()).toEqual([]);
   });
 });
+
+describe("möbler per dag", () => {
+  it("summerar ritningarna samma dag över evenemang och tar högsta antalet inom ett evenemang", async () => {
+    await db.query("update furniture_types set stock = 25 where id = 'stol'");
+    const a = await book("Lager A", "bekraftad", "Birka", "2028-03-01T09:00+01", "2028-03-01T17:00+01");
+    const b = await book("Lager B", "preliminar", "Stora salen", "2028-03-01T18:00+01", "2028-03-01T22:00+01");
+    const birka = await roomId("Birka");
+    const stora = await roomId("Stora salen");
+    await db.query(`insert into layouts (name, room_id, event_id, items) values
+      ('Teater', $1, $2, '[{"t":"stol"},{"t":"stol"},{"t":"stol"}]'),
+      ('Bankett', $1, $2, '[{"t":"rund180","chairs":10}]'),
+      ('Middag', $3, $4, '[{"t":"rund180","chairs":10},{"t":"rund180","chairs":10}]')`, [birka, a, stora, b]);
+    const r = await db.query<{ furniture_id: string; needed: number; stock: number | null }>(
+      "select furniture_id, needed, stock from furniture_by_day('2028-03-01', '2028-03-01') order by furniture_id");
+    expect(r.rows).toEqual([
+      { furniture_id: "rund180", needed: 3, stock: null },
+      { furniture_id: "stol", needed: 30, stock: 25 },
+    ]);
+  });
+});

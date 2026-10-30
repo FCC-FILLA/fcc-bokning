@@ -37,6 +37,7 @@ const SECTIONS: Section[] = [
       { href: "/evenemang", label: "Alla evenemang" },
       { href: "/mallar", label: "Mallar" },
       { href: "/mobleringar", label: "Möbleringar" },
+      { href: "/mobleringar/lager", label: "Möbler per dag" },
     ],
   },
   {
