@@ -50,7 +50,10 @@ export default async function RoomPage({
     <div className="grid gap-5 max-w-5xl">
       <div className="grid gap-2">
         <Link href="/lokaler" className="text-sm text-muted hover:underline">← Lokaler</Link>
-        <h1 className="text-2xl font-semibold">{room.name}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold">{room.name}</h1>
+          <Link className="btn btn-ghost text-sm" href={`/lokaler/${id}/ritning`}>Grundritning för möblering</Link>
+        </div>
         <p className="text-sm text-muted">
           {parent ? <>Ligger inuti <Link className="underline underline-offset-2" href={`/lokaler/${parent.id}`}>{parent.name}</Link>. </> : null}
           {children.length ? <>Delytor: {children.map((x, i) => <span key={x.id}>{i ? ", " : ""}<Link className="underline underline-offset-2" href={`/lokaler/${x.id}`}>{x.name}</Link></span>)}.</> : null}

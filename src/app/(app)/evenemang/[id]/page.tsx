@@ -15,6 +15,7 @@ import { History } from "@/components/history";
 import { StatusPill } from "@/components/status-pill";
 import { EventStaffing } from "@/components/event-staffing";
 import { EventPortalAdmin } from "@/components/event-portal-admin";
+import { EventLayouts } from "@/components/event-layouts";
 import { EventTabs } from "@/components/event-tabs";
 import { EventInvoicing } from "@/components/event-invoicing";
 import { saveEventAsTemplate } from "../../mallar/actions";
@@ -319,7 +320,12 @@ export default async function EventPage({
               </section>
             </>
           ),
-          genomforande: <EventPortalAdmin eventId={id} sent={sp.skickad} />,
+          genomforande: (
+            <>
+              <EventLayouts eventId={id} />
+              <EventPortalAdmin eventId={id} sent={sp.skickad} />
+            </>
+          ),
           ekonomi: (
             <>
             <section className="card p-5 grid gap-3">

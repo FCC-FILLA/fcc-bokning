@@ -36,6 +36,7 @@ const SECTIONS: Section[] = [
     items: [
       { href: "/evenemang", label: "Alla evenemang" },
       { href: "/mallar", label: "Mallar" },
+      { href: "/mobleringar", label: "Möbleringar" },
     ],
   },
   {
@@ -70,6 +71,7 @@ const SETTINGS: Section = {
     { href: "/installningar", label: "Översikt" },
     { href: "/lokaler", label: "Lokaler" },
     { href: "/prislista", label: "Prislista" },
+    { href: "/installningar/moblering", label: "Möbler och inventarier" },
     { href: "/installningar/evenemangstyper", label: "Evenemangstyper" },
     { href: "/installningar/bilder", label: "Bilder" },
     { href: "/installningar/offert", label: "Offert" },

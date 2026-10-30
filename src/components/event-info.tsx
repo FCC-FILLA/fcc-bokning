@@ -1,4 +1,6 @@
 import { fmtDate, fmtTime, isoToDate } from "@/lib/datum";
+import { parseItems, planFor } from "@/lib/moblering";
+import { LayoutSheet } from "@/components/layout-sheet";
 
 /** Det personalen får se om evenemanget: program, teknik, mat, ansvarig och delade dokument. Ingen ekonomi. */
 export type StaffEventInfo = {
@@ -12,6 +14,8 @@ export type StaffEventInfo = {
   responsible_email: string | null;
   bookings: { room: string; starts_at: string; ends_at: string }[];
   documents: { id: string; name: string; url: string | null }[];
+  layouts?: { id: string; name: string; room: string; notes: string | null; items: unknown; plan: unknown; kvm: number | null; starts_at: string | null }[];
+  furniture?: { id: string; name: string; color: string | null; sort_order: number }[];
 };
 
 export function EventInfo({ info, docHref }: { info: StaffEventInfo; docHref: (id: string) => string }) {
@@ -41,6 +45,12 @@ export function EventInfo({ info, docHref }: { info: StaffEventInfo; docHref: (i
         )}
         {texts.map((x) => (
           <div key={x.title}><p className="font-semibold">{x.title}</p><p className="whitespace-pre-line">{x.text}</p></div>
+        ))}
+        {(info.layouts ?? []).map((l) => (
+          <div key={l.id} className="grid gap-1">
+            <p className="font-semibold">Möblering: {l.name} <span className="font-normal text-muted">· {l.room}{l.starts_at ? ` · ${fmtDate(l.starts_at)} ${fmtTime(l.starts_at)}` : ""}</span></p>
+            <LayoutSheet compact plan={planFor(l.plan, l.kvm)} items={parseItems(l.items)} types={info.furniture ?? []} notes={l.notes} />
+          </div>
         ))}
         {info.documents.length > 0 && (
           <div>

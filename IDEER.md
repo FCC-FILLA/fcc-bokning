@@ -40,3 +40,10 @@ Saker som är bestämda men inte klara. Senast uppdaterad 2026-10-29.
 - Adress för fakturaunderlag är inte satt (Inställningar → E-post).
 - Bolagsverket: registrera API-konto, lägg BOLAGSVERKET_CLIENT_ID och BOLAGSVERKET_CLIENT_SECRET i Vercel.
 - Fyll i texterna under Personal → Info till personalen (entré, koder, personalmat).
+
+## Möbleringsverktyg (v1, 2026-10-30)
+Byggt: Evenemang → Möbleringar (mallar per lokal), ritverktyg med möbelbibliotek, dra/vrid/kopiera/ångra, markera flera, automatiska uppställningar
+(bankett, teater, klassrum, långbord, mingel) som undviker pelare, ställ-lista med lagervarning och kapacitetskoll, utskrift/PDF (A4 liggande),
+grundritning per lokal (mått, pelare, dörrar, nödutgångar, fast scen), Möbler och inventarier under Inställningar, ritningarna på personalens pass.
+Nästa steg: riktiga planritningar som bakgrundsbild (skalas mot mått), bordsplacering med gästnamn (import från Excel), ställtid/personalbehov per
+ritning, visa ritningen i offert och på kundens eventsida, lagerkoll mot andra evenemang samma dag.

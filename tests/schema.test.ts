@@ -866,3 +866,28 @@ describe("personalinfo", () => {
     expect(await titles()).toContain("Koder");
   });
 });
+
+describe("möbleringsritningar", () => {
+  it("räknar ställ-listan med stolar runt borden och följer med till personalen", async () => {
+    const counts = await db.query<{ c: Record<string, number> }>(
+      `select layout_counts('[{"t":"rund180","chairs":10},{"t":"rund180","chairs":8},{"t":"stol"},{"t":"stol"},{"t":"scen"}]'::jsonb) as c`,
+    );
+    expect(counts.rows[0].c).toEqual({ rund180: 2, scen: 1, stol: 20 });
+    const birka = await roomId("Birka");
+    const ev = (await db.query<{ id: string }>("insert into events (title, status) values ('Ritning-test', 'bekraftad') returning id")).rows[0].id;
+    await asUser(ADMIN, () =>
+      db.query("insert into layouts (name, room_id, event_id, items) values ('Bankett', $1, $2, '[{\"t\":\"rund180\",\"chairs\":10}]')", [birka, ev]),
+    );
+    const info = await db.query<{ d: { layouts: { name: string; room: string }[] } }>("select event_staff_info($1) as d", [ev]);
+    expect(info.rows[0].d.layouts.map((l) => `${l.name} ${l.room}`)).toEqual(["Bankett Birka"]);
+  });
+
+  it("läsare kan se men inte rita", async () => {
+    const birka = await roomId("Birka");
+    await asUser(LASARE, async () => {
+      await expect(db.query("insert into layouts (name, room_id) values ('Nej', $1)", [birka])).rejects.toThrow();
+      const r = await db.query("select * from furniture_types");
+      expect(r.rows.length).toBeGreaterThan(10);
+    });
+  });
+});
