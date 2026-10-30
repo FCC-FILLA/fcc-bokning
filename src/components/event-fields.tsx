@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { CustomerPicker } from "@/components/customer-picker";
 import type { Lookups } from "@/lib/lookups";
 import { STATUSES, STATUS_LABEL, type EventRow } from "@/lib/types";
 
@@ -12,13 +12,6 @@ export function EventFields({
   lookups: Lookups;
   disabled?: boolean;
 }) {
-  const companyName = new Map(lookups.companies.map((c) => [c.id, c.name]));
-  const contactsByCompany = new Map<string, typeof lookups.contacts>();
-  for (const c of lookups.contacts) {
-    const key = c.company_id ? companyName.get(c.company_id) ?? "Övriga" : "Utan företag";
-    contactsByCompany.set(key, [...(contactsByCompany.get(key) ?? []), c]);
-  }
-
   return (
     <fieldset disabled={disabled} className="grid gap-4">
       <div className="grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
@@ -42,24 +35,10 @@ export function EventFields({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="field">
-          <label className="label" htmlFor="company_id">Kund</label>
-          <select className="input" id="company_id" name="company_id" defaultValue={event?.company_id ?? ""}>
-            <option value="">Ingen kund vald</option>
-            {lookups.companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
-        <div className="field">
-          <label className="label" htmlFor="contact_id">Kontaktperson</label>
-          <select className="input" id="contact_id" name="contact_id" defaultValue={event?.contact_id ?? ""}>
-            <option value="">Ingen kontakt vald</option>
-            {[...contactsByCompany].map(([group, list]) => (
-              <optgroup key={group} label={group}>
-                {list.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
-        </div>
+        <CustomerPicker
+          companies={lookups.companies.map((c) => ({ id: c.id, name: c.name, org_nr: c.org_nr, city: c.city ?? null }))}
+          contacts={lookups.contacts.map((c) => ({ id: c.id, company_id: c.company_id, name: c.name, email: c.email }))}
+          companyId={event?.company_id} contactId={event?.contact_id} />
         <div className="field">
           <label className="label" htmlFor="responsible_id">Ansvarig hos FCC</label>
           <select className="input" id="responsible_id" name="responsible_id" defaultValue={event?.responsible_id ?? ""}>
@@ -68,9 +47,6 @@ export function EventFields({
           </select>
         </div>
       </div>
-      <p className="text-sm text-muted -mt-2">
-        Saknas kunden? <Link className="underline underline-offset-2" href="/kunder">Lägg till den under Kunder</Link> först.
-      </p>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="field">

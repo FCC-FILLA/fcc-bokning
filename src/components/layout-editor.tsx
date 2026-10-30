@@ -32,6 +32,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
   const roomMode = mode === "room";
   const [items, setItems] = useState<LayoutItem[]>(initial);
   const [dims, setDims] = useState({ width: initialPlan.width, depth: initialPlan.depth });
+  const [area, setArea] = useState(initialPlan.area);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [snap, setSnap] = useState(0.1);
   const [zoom, setZoom] = useState(1);
@@ -43,15 +44,25 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
   const drag = useRef<Drag | null>(null);
   const past = useRef<LayoutItem[][]>([]);
   const future = useRef<LayoutItem[][]>([]);
-  const [saved] = useState(() => JSON.stringify({ items: initial, dims: { width: initialPlan.width, depth: initialPlan.depth } }));
+  const [saved] = useState(() => JSON.stringify({ items: initial, dims: { width: initialPlan.width, depth: initialPlan.depth }, area: initialPlan.area }));
   const [submitting, setSubmitting] = useState(false);
 
   const byId = useMemo(() => new Map(types.map((t) => [t.id, t])), [types]);
   const colors = useMemo(() => Object.fromEntries(types.map((t) => [t.id, t.color])), [types]);
   const names = useMemo(() => Object.fromEntries(types.map((t) => [t.id, t.name])), [types]);
   const palette = types.filter((t) => t.active && (roomMode ? t.shape === "fixed" || t.id === "scen" : t.shape !== "fixed"));
-  const plan: RoomPlan = roomMode ? { width: dims.width, depth: dims.depth, items: [] } : initialPlan;
-  const dirty = JSON.stringify({ items, dims }) !== saved;
+  const plan: RoomPlan = roomMode ? { ...initialPlan, width: dims.width, depth: dims.depth, items: [], area } : initialPlan;
+  const dirty = JSON.stringify({ items, dims, area }) !== saved;
+  // Med planritning som bakgrund är proportionerna låsta: ändrad bredd = ändrad skala, och allt ritat följer med.
+  const rescale = (width: number) => {
+    const f = width / dims.width;
+    if (!Number.isFinite(f) || f <= 0) return;
+    setDims({ width, depth: r2(dims.depth * f) });
+    setArea((a) => (a ? { x: r2(a.x * f), y: r2(a.y * f), w: r2(a.w * f), h: r2(a.h * f) } : a));
+    commit((prev) => prev.map((i) => ({ ...i, x: r2(i.x * f), y: r2(i.y * f) })));
+  };
+  const setAreaField = (k: "x" | "y" | "w" | "h", v: number) =>
+    setArea((a) => ({ ...(a ?? { x: 0, y: 0, w: dims.width, h: dims.depth }), [k]: Math.max(0, v) }));
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => { if (dirty && !submitting) e.preventDefault(); };
@@ -233,13 +244,33 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
         </div>
         {roomMode && (
           <div className="grid grid-cols-2 gap-2 border-t border-line pt-2">
-            <div className="field"><label className="label" htmlFor="plan-w">Bredd (m)</label>
-              <input className="input" id="plan-w" name="width" type="number" step="0.5" min={2} max={200} value={dims.width}
-                onChange={(e) => setDims((d) => ({ ...d, width: Math.max(2, Number(e.target.value) || 2) }))} /></div>
-            <div className="field"><label className="label" htmlFor="plan-d">Djup (m)</label>
-              <input className="input" id="plan-d" name="depth" type="number" step="0.5" min={2} max={200} value={dims.depth}
-                onChange={(e) => setDims((d) => ({ ...d, depth: Math.max(2, Number(e.target.value) || 2) }))} /></div>
-            <p className="col-span-2 text-xs text-muted">Fronten (scenen) ligger upptill. {kvm ? `Lokalen är ${kvm} kvm, ritningen ${r2(dims.width * dims.depth)} kvm.` : ""}</p>
+            <input type="hidden" name="area" value={area ? JSON.stringify(area) : ""} />
+            <input type="hidden" name="bg" value={initialPlan.bg ?? ""} />
+            {initialPlan.bg ? (
+              <>
+                <input type="hidden" name="depth" value={dims.depth} />
+                <div className="field col-span-2"><label className="label" htmlFor="plan-w">Ritningens bredd (m)</label>
+                  <input className="input" id="plan-w" name="width" type="number" step="0.1" min={2} max={200} defaultValue={dims.width}
+                    onBlur={(e) => { const v = Number(e.target.value); if (v >= 2 && v !== dims.width) rescale(v); }} />
+                  <span className="text-xs text-muted">Skalan är uppskattad från stolsbredder och trappsteg i ritningen. Mät en vägg och justera bredden så stämmer allt.</span></div>
+              </>
+            ) : (
+              <>
+                <div className="field"><label className="label" htmlFor="plan-w">Bredd (m)</label>
+                  <input className="input" id="plan-w" name="width" type="number" step="0.5" min={2} max={200} value={dims.width}
+                    onChange={(e) => setDims((d) => ({ ...d, width: Math.max(2, Number(e.target.value) || 2) }))} /></div>
+                <div className="field"><label className="label" htmlFor="plan-d">Djup (m)</label>
+                  <input className="input" id="plan-d" name="depth" type="number" step="0.5" min={2} max={200} value={dims.depth}
+                    onChange={(e) => setDims((d) => ({ ...d, depth: Math.max(2, Number(e.target.value) || 2) }))} /></div>
+              </>
+            )}
+            <p className="col-span-2 text-xs font-semibold mt-1">Möblerbar golvyta</p>
+            {(["x", "y", "w", "h"] as const).map((k) => (
+              <div key={k} className="field"><label className="label" htmlFor={`area-${k}`}>{{ x: "Från vänster", y: "Från ovan", w: "Bredd", h: "Djup" }[k]}</label>
+                <input className="input" id={`area-${k}`} type="number" step="0.1" min={0} value={area?.[k] ?? (k === "w" ? dims.width : k === "h" ? dims.depth : 0)}
+                  onChange={(e) => setAreaField(k, Number(e.target.value) || 0)} /></div>
+            ))}
+            <p className="col-span-2 text-xs text-muted">Den streckade ytan fylls när man väljer Fyll automatiskt. Fronten (scenen) ligger upptill.{kvm ? ` Lokalen är ${kvm} kvm.` : ""}</p>
           </div>
         )}
       </aside>
@@ -279,6 +310,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
             className="block select-none"
             title={fields?.name}
             widthPct={zoom * 100}
+            showArea={roomMode || items.length === 0}
           />
         </div>
         <p className="text-xs text-muted print:hidden">

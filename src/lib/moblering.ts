@@ -32,7 +32,19 @@ export type LayoutItem = {
   label?: string;
 };
 
-export type RoomPlan = { width: number; depth: number; items: LayoutItem[] };
+export type Area = { x: number; y: number; w: number; h: number };
+/** bg = planritning som bakgrund (täcker hela width × depth). area = golvytan som går att möblera (används av generatorn). */
+export type RoomPlan = { width: number; depth: number; items: LayoutItem[]; bg?: string; area?: Area };
+
+function parseArea(v: unknown, width: number, depth: number): Area | undefined {
+  const a = v as Partial<Area> | null;
+  if (!a) return undefined;
+  const x = Math.max(0, Number(a.x) || 0);
+  const y = Math.max(0, Number(a.y) || 0);
+  const w = Math.min(width - x, Number(a.w) || 0);
+  const h = Math.min(depth - y, Number(a.h) || 0);
+  return w > 0.5 && h > 0.5 ? { x, y, w, h } : undefined;
+}
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -41,7 +53,15 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export function planFor(plan: unknown, kvm: number | null): RoomPlan {
   const p = plan as Partial<RoomPlan> | null;
   if (p && Number(p.width) > 0 && Number(p.depth) > 0) {
-    return { width: Number(p.width), depth: Number(p.depth), items: Array.isArray(p.items) ? (p.items as LayoutItem[]) : [] };
+    const width = Number(p.width);
+    const depth = Number(p.depth);
+    return {
+      width,
+      depth,
+      items: Array.isArray(p.items) ? (p.items as LayoutItem[]) : [],
+      bg: typeof p.bg === "string" && /^\/ritningar\/[\w-]+\.(png|svg|jpg)$/.test(p.bg) ? p.bg : undefined,
+      area: parseArea(p.area, width, depth),
+    };
   }
   const area = kvm && kvm > 0 ? kvm : 300;
   const width = Math.max(4, Math.round(Math.sqrt(area * 1.4)));
@@ -157,10 +177,13 @@ export const GEN_LABEL: Record<GenKind, string> = {
 /** Bygger en uppställning som fyller lokalen tills gästantalet nås eller ytan tar slut. */
 export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions): { items: LayoutItem[]; seats: number; full: boolean } {
   const type = (id: string | undefined, fallback: string) => types.find((t) => t.id === id) ?? types.find((t) => t.id === fallback)!;
-  const x0 = o.margin;
-  const x1 = plan.width - o.margin;
-  const y0 = o.front;
-  const y1 = plan.depth - o.margin;
+  // Golvytan: lokalens markerade möblerbara yta, annars hela ritningen.
+  const A = plan.area ?? { x: 0, y: 0, w: plan.width, h: plan.depth };
+  const x0 = A.x + o.margin;
+  const x1 = A.x + A.w - o.margin;
+  const y0 = A.y + o.front;
+  const y1 = A.y + A.h - o.margin;
+  const mid = A.x + A.w / 2;
   const items: LayoutItem[] = [];
   let seats = 0;
   const need = Math.max(1, o.guests);
@@ -181,7 +204,7 @@ export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions):
     const per = o.aisle > 0 ? perHalf * 2 : perHalf;
     if (per <= 0) return;
     const blockW = perHalf * cellW;
-    const starts = o.aisle > 0 ? [plan.width / 2 - o.aisle / 2 - blockW, plan.width / 2 + o.aisle / 2] : [plan.width / 2 - blockW / 2];
+    const starts = o.aisle > 0 ? [mid - o.aisle / 2 - blockW, mid + o.aisle / 2] : [mid - blockW / 2];
     for (let cy = y0 + pitch / 2; cy + pitch / 2 <= y1 + 0.001 && seats < need; cy += pitch) {
       for (const sx of starts) for (let k = 0; k < perHalf && seats < need; k++) seats += place(sx + cellW * (k + 0.5), cy);
     }
@@ -214,7 +237,7 @@ export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions):
     for (let cy = y0 + pitch / 2; cy + pitch / 2 <= y1 + 0.001 && seats < need; cy += pitch) {
       const rowW = perRow * Number(t.width_m);
       for (let k = 0; k < perRow && seats < need; k++) {
-        const cx = plan.width / 2 - rowW / 2 + Number(t.width_m) * (k + 0.5);
+        const cx = mid - rowW / 2 + Number(t.width_m) * (k + 0.5);
         if (!free(cx, cy, Number(t.width_m) / 2, Number(t.depth_m) / 2 + 0.6)) continue;
         const it = newItem(t, cx, cy);
         it.chairs = Math.min(cap, need - seats);
@@ -236,7 +259,7 @@ export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions):
       const n = Math.floor((x1 - x0 - 2 * r - off) / pitch) + 1;
       if (n <= 0) continue;
       const rowW = (n - 1) * pitch;
-      const sx = plan.width / 2 - rowW / 2 + off / 2;
+      const sx = mid - rowW / 2 + off / 2;
       for (let k = 0; k < n && seats < need; k++) {
         if (!free(sx + pitch * k, cy, r, r)) continue;
         const it = newItem(t, sx + pitch * k, cy);

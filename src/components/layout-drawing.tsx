@@ -42,11 +42,13 @@ type Props = {
   title?: string;
   /** Bredd i procent av behållaren (zoom). */
   widthPct?: number;
+  /** Visa den möblerbara golvytan streckad. */
+  showArea?: boolean;
 };
 
 export function LayoutDrawing({
   plan, items, colors = {}, names = {}, selected, numbers = true, grid = true, editFixed = false, marquee, svgRef,
-  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100,
+  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100, showArea = false,
 }: Props) {
   const W = plan.width;
   const D = plan.depth;
@@ -119,13 +121,27 @@ export function LayoutDrawing({
       onPointerUp={onUp}
       style={{ touchAction: onItemDown ? "none" : undefined, background: "#fff", width: `${widthPct}%`, height: "auto" }}
     >
-      <rect x={0} y={0} width={W} height={D} fill="#fbf8f5" stroke="#2a1c1d" strokeWidth={0.1} data-bg="1" />
-      {lines}
+      {plan.bg ? (
+        <>
+          <rect x={0} y={0} width={W} height={D} fill="#fff" />
+          <image href={plan.bg} x={0} y={0} width={W} height={D} preserveAspectRatio="none" style={{ pointerEvents: "none" }} />
+          <g opacity={0.45}>{lines}</g>
+          <rect x={0} y={0} width={W} height={D} fill="none" stroke="#d6cbc3" strokeWidth={0.06} />
+        </>
+      ) : (
+        <>
+          <rect x={0} y={0} width={W} height={D} fill="#fbf8f5" stroke="#2a1c1d" strokeWidth={0.1} />
+          {lines}
+        </>
+      )}
+      {plan.area && showArea && (
+        <rect x={plan.area.x} y={plan.area.y} width={plan.area.w} height={plan.area.h} fill="rgba(96,39,43,.05)" stroke="#60272b" strokeWidth={0.08} strokeDasharray="0.4 0.25" style={{ pointerEvents: "none" }} />
+      )}
       <text x={W / 2} y={-pad / 2} textAnchor="middle" dominantBaseline="central" fontSize={fs} fill="#7a6466" letterSpacing={0.1}>
         FRONT / SCEN
       </text>
       <text x={W / 2} y={D + pad / 2} textAnchor="middle" dominantBaseline="central" fontSize={fs * 0.85} fill="#7a6466">
-        {W.toLocaleString("sv-SE")} m × {D.toLocaleString("sv-SE")} m · rutor 1 m
+        {plan.bg ? "rutor 1 m" : `${W.toLocaleString("sv-SE")} m × ${D.toLocaleString("sv-SE")} m · rutor 1 m`}
       </text>
       {plan.items.map((i) => draw(i, true))}
       {items.map((i) => draw(i, false))}

@@ -49,6 +49,28 @@ function readEvent(fd: FormData) {
   return EventSchema.safeParse(raw);
 }
 
+/** Ny kund och/eller ny kontaktperson som skapats direkt i evenemangsformuläret. Fyller i company_id/contact_id i formuläret. */
+async function createCustomerInline(fd: FormData, back: string) {
+  const supabase = await createClient();
+  const newCompany = opt(fd.get("new_company_name"));
+  if (newCompany && !opt(fd.get("company_id"))) {
+    const { data, error } = await supabase.from("companies").insert({ name: newCompany }).select("id").single();
+    if (error || !data) redirect(`${back}?fel=${encodeURIComponent("Det gick inte att skapa kunden.")}`);
+    fd.set("company_id", data.id);
+  }
+  if (fd.get("contact_id") === "ny") {
+    const name = opt(fd.get("new_contact_name"));
+    if (!name) redirect(`${back}?fel=${encodeURIComponent("Den nya kontaktpersonen behöver ett namn.")}`);
+    const { data, error } = await supabase
+      .from("contacts")
+      .insert({ name, email: opt(fd.get("new_contact_email")), phone: opt(fd.get("new_contact_phone")), company_id: opt(fd.get("company_id")) })
+      .select("id")
+      .single();
+    if (error || !data) redirect(`${back}?fel=${encodeURIComponent("Det gick inte att skapa kontaktpersonen.")}`);
+    fd.set("contact_id", data.id);
+  }
+}
+
 function readBookings(fd: FormData, eventId: string) {
   const { rows, error } = parseRows(opt(fd.get("rows")));
   if (error) return { rows: [], error };
@@ -57,6 +79,8 @@ function readBookings(fd: FormData, eventId: string) {
 
 export async function createEvent(fd: FormData) {
   await requireBooker();
+  if (!opt(fd.get("title"))) redirect(`/evenemang/ny?fel=${encodeURIComponent("Ge evenemanget ett namn.")}`);
+  await createCustomerInline(fd, "/evenemang/ny");
   const parsed = readEvent(fd);
   if (!parsed.success) redirect(`/evenemang/ny?fel=${encodeURIComponent(parsed.error.issues[0].message)}`);
 
@@ -75,6 +99,7 @@ export async function createEvent(fd: FormData) {
 
 export async function updateEvent(id: string, fd: FormData) {
   await requireBooker();
+  await createCustomerInline(fd, `/evenemang/${id}`);
   const parsed = readEvent(fd);
   if (!parsed.success) redirect(`/evenemang/${id}?fel=${encodeURIComponent(parsed.error.issues[0].message)}`);
   const supabase = await createClient();

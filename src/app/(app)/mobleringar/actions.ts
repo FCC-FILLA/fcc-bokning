@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { canManageStaff, isAdmin, requireProfile } from "@/lib/auth";
-import { parseItems } from "@/lib/moblering";
+import { parseItems, planFor } from "@/lib/moblering";
 import { createClient } from "@/lib/supabase/server";
 
 const opt = (v: FormDataEntryValue | null) => {
@@ -135,7 +135,16 @@ export async function saveRoomPlan(roomId: string, fd: FormData) {
   const depth = Number(String(fd.get("depth") ?? "").replace(",", "."));
   if (!(width >= 2 && width <= 200 && depth >= 2 && depth <= 200)) fail(path, "Bredd och djup måste vara mellan 2 och 200 meter.");
   const supabase = await createClient();
-  const { error } = await supabase.from("rooms").update({ plan: { width, depth, items: itemsFrom(fd) } }).eq("id", roomId);
+  let area: unknown = null;
+  try {
+    area = fd.get("area") ? JSON.parse(String(fd.get("area"))) : null;
+  } catch {
+    area = null;
+  }
+  const raw = { width, depth, items: itemsFrom(fd), bg: opt(fd.get("bg")) ?? undefined, area: area ?? undefined };
+  // planFor validerar bakgrundens sökväg och golvytan.
+  const plan = planFor(raw, null);
+  const { error } = await supabase.from("rooms").update({ plan }).eq("id", roomId);
   if (error) fail(path, `Kunde inte spara: ${error.message}`);
   revalidatePath("/mobleringar", "layout");
   redirect(`${path}?sparad=1`);
