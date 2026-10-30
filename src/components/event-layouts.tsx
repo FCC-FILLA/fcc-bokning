@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { canManageStaff, getProfile } from "@/lib/auth";
 import { fmtDate, fmtTime } from "@/lib/datum";
-import { countItems, focusView, parseItems, planFor } from "@/lib/moblering";
+import { closedWalls, countItems, focusView, parseItems, planFor } from "@/lib/moblering";
 import { loadFurniture } from "@/lib/moblering-server";
 import { createClient } from "@/lib/supabase/server";
 import { LayoutDrawing } from "@/components/layout-drawing";
 import { createLayout } from "@/app/(app)/mobleringar/actions";
 
-type L = { id: string; name: string; room_id: string; booking_id: string | null; items: unknown; staff_visible: boolean; event_id: string | null };
+type L = { id: string; name: string; room_id: string; booking_id: string | null; items: unknown; staff_visible: boolean; event_id: string | null; walls: string[] | null };
 type B = { id: string; room_id: string; starts_at: string; ends_at: string };
 type R = { id: string; name: string; kvm: number | null; plan: unknown };
 
@@ -16,8 +16,8 @@ export async function EventLayouts({ eventId }: { eventId: string }) {
   const editor = canManageStaff(await getProfile());
   const supabase = await createClient();
   const [{ data: l }, { data: t }, { data: b }, { data: r }, types] = await Promise.all([
-    supabase.from("layouts").select("id, name, room_id, booking_id, items, staff_visible, event_id").eq("event_id", eventId).order("created_at"),
-    supabase.from("layouts").select("id, name, room_id, booking_id, items, staff_visible, event_id").is("event_id", null).order("name"),
+    supabase.from("layouts").select("id, name, room_id, booking_id, items, staff_visible, event_id, walls").eq("event_id", eventId).order("created_at"),
+    supabase.from("layouts").select("id, name, room_id, booking_id, items, staff_visible, event_id, walls").is("event_id", null).order("name"),
     supabase.from("bookings").select("id, room_id, starts_at, ends_at").eq("event_id", eventId).order("starts_at"),
     supabase.from("rooms").select("id, name, kvm, plan"),
     loadFurniture(supabase),
@@ -46,7 +46,7 @@ export async function EventLayouts({ eventId }: { eventId: string }) {
             return (
               <div key={x.id} className="rounded-lg border border-line overflow-hidden grid">
                 <Link href={`/mobleringar/${x.id}`} className="bg-white border-b border-line">
-                  <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} view={focusView(planFor(room?.plan, room?.kvm ?? null), items)} colors={colors} numbers={false} grid={false} className="block" />
+                  <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} view={focusView(planFor(room?.plan, room?.kvm ?? null), items)} closed={closedWalls(planFor(room?.plan, room?.kvm ?? null), x.walls)} colors={colors} numbers={false} grid={false} className="block" />
                 </Link>
                 <div className="p-3 flex flex-wrap items-center gap-2">
                   <span className="grid flex-1 min-w-40">

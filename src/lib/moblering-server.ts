@@ -16,5 +16,6 @@ export type LayoutRow = {
   items: unknown;
   notes: string | null;
   staff_visible: boolean;
+  walls: string[] | null;
   updated_at: string;
 };

@@ -42,6 +42,8 @@ type Props = {
   title?: string;
   /** Bredd i procent av behållaren (zoom). */
   widthPct?: number;
+  /** Stängda vikväggar (id). Utan detta gäller lokalens standard. */
+  closed?: Set<string>;
   /** Visa bara detta utsnitt (meter). */
   view?: { x: number; y: number; w: number; h: number };
   /** Visa den möblerbara golvytan streckad. */
@@ -50,7 +52,7 @@ type Props = {
 
 export function LayoutDrawing({
   plan, items, colors = {}, names = {}, selected, numbers = true, grid = true, editFixed = false, marquee, svgRef,
-  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100, showArea = false, view,
+  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100, showArea = false, view, closed,
 }: Props) {
   const W = plan.width;
   const D = plan.depth;
@@ -138,6 +140,15 @@ export function LayoutDrawing({
           {lines}
         </>
       )}
+      {(plan.walls ?? []).map((w) => {
+        const shut = closed ? closed.has(w.id) : !!w.closed;
+        return (
+          <g key={w.id} style={{ pointerEvents: "none" }}>
+            <line x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2} stroke={shut ? "#2a1c1d" : "#60272b"} strokeWidth={shut ? 0.22 : 0.06}
+              strokeDasharray={shut ? undefined : "0.35 0.25"} opacity={shut ? 1 : 0.6} strokeLinecap="round" />
+          </g>
+        );
+      })}
       {plan.area && showArea && (
         <rect x={plan.area.x} y={plan.area.y} width={plan.area.w} height={plan.area.h} fill="rgba(96,39,43,.05)" stroke="#60272b" strokeWidth={0.08} strokeDasharray="0.4 0.25" style={{ pointerEvents: "none" }} />
       )}

@@ -83,6 +83,7 @@ export default async function LayoutPage({
         setups={(setups ?? []) as { id: string; name: string }[]}
         fields={{ name: l.name, setup_id: l.setup_id, notes: l.notes, staff_visible: l.staff_visible }}
         guests={e?.participants ?? null}
+        walls={l.walls}
         kvm={r.kvm}
       />
     </div>
