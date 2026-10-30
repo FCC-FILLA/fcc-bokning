@@ -1,5 +1,6 @@
 // Skickar e-postkön (email_outbox) via Resend. Anropas varje minut av pg_cron och direkt från appen.
 // Utan RESEND_API_KEY gör funktionen ingenting, och mejlen ligger kvar i kön.
+// Testläge: är inställningen mail_test_to satt går ALLA mejl dit i stället för till mottagaren.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -10,9 +11,11 @@ Deno.serve(async () => {
   if (!key) return json({ skipped: "RESEND_API_KEY saknas" });
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 
-  const { data: settings } = await db.from("app_settings").select("key, value").in("key", ["mail_from", "mail_reply_to", "look_accent", "company_name"]);
+  const { data: settings } = await db.from("app_settings").select("key, value").in("key", ["mail_from", "mail_reply_to", "look_accent", "company_name", "mail_test_to"]);
   const s = new Map((settings ?? []).map((x: { key: string; value: string }) => [x.key, x.value]));
   const from = s.get("mail_from") || "FCC Bokning <bokning@mail.filadelfiacc.se>";
+  // Testläge: allt går till testadressen i stället för till mottagaren.
+  const testTo = (s.get("mail_test_to") ?? "").trim();
   const accent = /^#[0-9a-f]{6}$/i.test(s.get("look_accent") ?? "") ? s.get("look_accent")! : "#60272b";
 
   // Ta upp till 40 mejl i taget. Markera dem först så att två körningar inte skickar samma mejl.
@@ -36,8 +39,11 @@ Deno.serve(async () => {
         for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         attachments.push({ filename: f.name || "bilaga", content: btoa(bin) });
       }
-      const text = m.link ? `${m.body}\n\n${m.link}` : m.body;
+      const realTo = m.to_name ? `${m.to_name} <${m.to_email}>` : m.to_email;
+      const testNote = testTo ? `[TESTLÄGE – skulle ha gått till ${realTo}]\n\n` : "";
+      const text = testNote + (m.link ? `${m.body}\n\n${m.link}` : m.body);
       const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#2a1c1d;max-width:560px">
+        ${testTo ? `<p style="background:#fff3cd;border:1px solid #e0c36c;padding:8px 12px;border-radius:6px;font-size:13px"><b>TESTLÄGE</b> – skulle ha gått till ${esc(realTo)}</p>` : ""}
         ${esc(m.body).replace(/\n/g, "<br>")}
         ${m.link ? `<p style="margin:24px 0"><a href="${esc(m.link)}" style="background:${accent};color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;display:inline-block;font-weight:bold">Öppna</a></p><p style="font-size:12px;color:#7a6466">${esc(m.link)}</p>` : ""}
       </div>`;
@@ -46,8 +52,8 @@ Deno.serve(async () => {
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           from,
-          to: [m.to_name ? `${m.to_name} <${m.to_email}>` : m.to_email],
-          subject: m.subject,
+          to: [testTo || realTo],
+          subject: testTo ? `[TEST] ${m.subject}` : m.subject,
           text,
           html,
           reply_to: m.reply_to || s.get("mail_reply_to") || undefined,

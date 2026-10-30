@@ -35,7 +35,26 @@ export type LayoutItem = {
 
 export type Area = { x: number; y: number; w: number; h: number };
 /** bg = planritning som bakgrund (täcker hela width × depth). area = golvytan som går att möblera (används av generatorn). */
-export type RoomPlan = { width: number; depth: number; items: LayoutItem[]; bg?: string; area?: Area };
+/** Vikvägg/skjutvägg som kan vara stängd eller öppen. closed = standardläget för lokalen. */
+export type Wall = { id: string; name: string; x1: number; y1: number; x2: number; y2: number; closed?: boolean };
+export type RoomPlan = { width: number; depth: number; items: LayoutItem[]; bg?: string; area?: Area; walls?: Wall[] };
+
+function parseWalls(v: unknown): Wall[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .filter((w) => w && typeof w.id === "string" && [w.x1, w.y1, w.x2, w.y2].every((n) => Number.isFinite(Number(n))))
+    .map((w) => ({
+      id: String(w.id).slice(0, 40), name: String(w.name ?? w.id).slice(0, 60),
+      x1: Number(w.x1), y1: Number(w.y1), x2: Number(w.x2), y2: Number(w.y2), closed: !!w.closed,
+    }));
+  return out.length ? out : undefined;
+}
+
+/** Vilka vikväggar som är stängda: ritningens eget val, annars lokalens standard. */
+export function closedWalls(plan: RoomPlan, chosen: unknown): Set<string> {
+  if (Array.isArray(chosen)) return new Set(chosen.filter((x): x is string => typeof x === "string"));
+  return new Set((plan.walls ?? []).filter((w) => w.closed).map((w) => w.id));
+}
 
 function parseArea(v: unknown, width: number, depth: number): Area | undefined {
   const a = v as Partial<Area> | null;
@@ -62,6 +81,7 @@ export function planFor(plan: unknown, kvm: number | null): RoomPlan {
       items: Array.isArray(p.items) ? (p.items as LayoutItem[]) : [],
       bg: typeof p.bg === "string" && /^\/ritningar\/[\w-]+\.(png|svg|jpg)$/.test(p.bg) ? p.bg : undefined,
       area: parseArea(p.area, width, depth),
+      walls: parseWalls(p.walls),
     };
   }
   const area = kvm && kvm > 0 ? kvm : 300;

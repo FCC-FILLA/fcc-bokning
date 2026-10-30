@@ -1,14 +1,14 @@
 -- Import av ett evenemang med offerter från ShowWizrd (JSON som förberetts av importskriptet).
 -- Villkor: offertens egna om de avviker från standard, annars standardtexten för språket.
 -- Kan köras igen: evenemanget och dess offerter ersätts via external_id.
--- Offertrader kopplas alltid till en artikel i prislistan. Saknas artikeln skapas den;
--- saknar artikeln pris får den priset (och kostnaden) från ShowWizrd.
+-- Offertrader kopplas till en artikel i prislistan när det finns en; annars blir de fria textrader.
+-- Saknar artikeln pris får den priset (och kostnaden) från ShowWizrd.
 create or replace function import_sw_event(p jsonb) returns jsonb
 language plpgsql set search_path = public as $$
 declare
   v_event uuid; v_company uuid; v_contact uuid; v_quote uuid; v_room uuid;
   b jsonb; q jsonb; l jsonb; a record;
-  n_book int := 0; n_quotes int := 0; n_lines int := 0; n_new_art int := 0; n_priced int := 0;
+  n_book int := 0; n_quotes int := 0; n_lines int := 0; n_text int := 0; n_priced int := 0;
   missing text[] := '{}'; i int;
 begin
   select id into v_company from companies where lower(name) = lower(p->>'company') order by created_at limit 1;
@@ -54,19 +54,15 @@ begin
     i := 0;
     for l in select * from jsonb_array_elements(q->'lines') loop
       i := i + 1;
-      -- 1) exakt namn, 2) längsta artikelnamn som raden börjar med
+      -- Längsta artikelnamn som raden börjar med (exakt namn ingår), så att
+      -- "Konferensvärd; 1-500 gäster" väljs före "Konferensvärd". Skiljetecken och mellanslag
+      -- ignoreras ("heldag - upp till 10 h" = "heldag, upp till 10 h").
       select ar.id, ar.group_id, ar.price, ar.cost into a from articles ar
-      where ar.active and lower(ar.name) = lower(l->>'hint') limit 1;
+      where ar.active and length(ar.name) >= 4
+        and regexp_replace(lower(l->>'desc'), '[^a-z0-9åäöé]+', '', 'g') like regexp_replace(lower(ar.name), '[^a-z0-9åäöé]+', '', 'g') || '%'
+      order by length(ar.name) desc limit 1;
       if a.id is null then
-        select ar.id, ar.group_id, ar.price, ar.cost into a from articles ar
-        where ar.active and length(ar.name) >= 4 and lower(l->>'desc') like lower(ar.name) || '%'
-        order by length(ar.name) desc limit 1;
-      end if;
-      if a.id is null then
-        insert into articles (name, group_id, unit, price, cost, vat_rate, active)
-        values (l->>'hint', l->>'group', 'st', (l->>'price')::numeric, coalesce((l->>'cost')::numeric, 0), 25, true)
-        returning id, group_id, price, cost into a;
-        n_new_art := n_new_art + 1;
+        n_text := n_text + 1;  -- ingen artikel: fri textrad i offerten
       elsif a.price is null and (l->>'price')::numeric > 0 then
         update articles set price = (l->>'price')::numeric,
           cost = case when coalesce(cost, 0) = 0 then coalesce((l->>'cost')::numeric, 0) else cost end, updated_at = now()
@@ -74,7 +70,7 @@ begin
         n_priced := n_priced + 1;
       end if;
       insert into quote_lines (quote_id, group_id, article_id, description, line_date, quantity, unit_price, cost, discount_pct, vat_rate, kind, sort_order)
-      values (v_quote, a.group_id, a.id, l->>'desc', nullif(l->>'date', '')::date, (l->>'qty')::numeric, (l->>'unit_price')::numeric,
+      values (v_quote, coalesce(a.group_id, l->>'group'), a.id, l->>'desc', nullif(l->>'date', '')::date, (l->>'qty')::numeric, (l->>'unit_price')::numeric,
               coalesce((l->>'cost')::numeric, 0), (l->>'disc')::numeric, 25, (l->>'kind')::quote_line_kind, i);
       n_lines := n_lines + 1;
       a := null;
@@ -82,6 +78,6 @@ begin
   end loop;
 
   return jsonb_build_object('event', p->>'title', 'company_found', v_company is not null, 'contact_found', v_contact is not null,
-    'bookings', n_book, 'quotes', n_quotes, 'lines', n_lines, 'new_articles', n_new_art, 'priced_articles', n_priced, 'missing_rooms', missing);
+    'bookings', n_book, 'quotes', n_quotes, 'lines', n_lines, 'text_lines', n_text, 'priced_articles', n_priced, 'missing_rooms', missing);
 end $$;
 revoke execute on function import_sw_event(jsonb) from public, anon, authenticated;

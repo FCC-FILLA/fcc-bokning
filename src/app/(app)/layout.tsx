@@ -31,16 +31,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     );
   }
   const supabase = await createClient();
-  const [{ data: conflicts }, { count: unread }] = await Promise.all([
+  const [{ data: conflicts }, { count: unread }, { data: testRow }] = await Promise.all([
     supabase.from("booking_conflicts").select("booking_id, other_booking_id").gte("ends_at", new Date().toISOString()),
     supabase.from("notifications").select("id", { count: "exact", head: true }).eq("profile_id", profile.id).is("read_at", null),
+    supabase.from("app_settings").select("value").eq("key", "mail_test_to").maybeSingle(),
   ]);
+  const mailTestTo = ((testRow as { value: string } | null)?.value ?? "").trim();
   deliverNotifications();
   // Varje krock syns två gånger (A–B och B–A).
   const conflictCount = Math.round((conflicts?.length ?? 0) / 2);
 
   return (
     <div className="min-h-dvh">
+      {mailTestTo && (
+        <div className="bg-warn-soft text-warn text-center text-xs font-semibold px-4 py-1.5 print:hidden">
+          Testläge: inga mejl går till kunder eller personal – allt skickas till {mailTestTo}.{" "}
+          <Link href="/installningar/epost" className="underline">Ändra</Link>
+        </div>
+      )}
       <header className="bg-brand text-white sticky top-0 z-20 print:hidden">
         <div className="mx-auto max-w-[1500px] px-4 pt-3 pb-2 grid gap-2">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

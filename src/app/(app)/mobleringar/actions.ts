@@ -16,6 +16,15 @@ async function requirePlanner(path: string) {
   if (!canManageStaff(await requireProfile())) fail(path, "Du har inte behörighet att rita möbleringar.");
 }
 
+function wallsFrom(fd: FormData): string[] | null {
+  try {
+    const v = JSON.parse(String(fd.get("walls") ?? "null"));
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 50) : null;
+  } catch {
+    return null;
+  }
+}
+
 function itemsFrom(fd: FormData) {
   try {
     return parseItems(JSON.parse(String(fd.get("items") ?? "[]")));
@@ -39,13 +48,15 @@ export async function createLayout(fd: FormData) {
   }
   const from = opt(fd.get("from"));
   let items: unknown = [];
+  let walls: string[] | null = null;
   let setup = opt(fd.get("setup_id"));
   let notes: string | null = null;
   let name = opt(fd.get("name"));
   if (from) {
-    const { data: src } = await supabase.from("layouts").select("items, setup_id, notes, room_id, name").eq("id", from).single();
+    const { data: src } = await supabase.from("layouts").select("items, setup_id, notes, room_id, name, walls").eq("id", from).single();
     if (src) {
       items = src.items;
+      walls = src.walls;
       setup = setup ?? src.setup_id;
       notes = src.notes;
       roomId = roomId ?? src.room_id;
@@ -63,7 +74,7 @@ export async function createLayout(fd: FormData) {
   }
   const { data, error } = await supabase
     .from("layouts")
-    .insert({ name, room_id: roomId!, setup_id: setup, event_id: eventId, booking_id: bookingId, items, notes })
+    .insert({ name, room_id: roomId!, setup_id: setup, event_id: eventId, booking_id: bookingId, items, notes, walls })
     .select("id")
     .single();
   if (error || !data) fail(back, `Kunde inte skapa ritningen: ${error?.message ?? "okänt fel"}`);
@@ -79,7 +90,7 @@ export async function saveLayout(id: string, fd: FormData) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("layouts")
-    .update({ name, setup_id: opt(fd.get("setup_id")), notes: opt(fd.get("notes")), staff_visible: fd.get("staff_visible") === "on", items: itemsFrom(fd) })
+    .update({ name, setup_id: opt(fd.get("setup_id")), notes: opt(fd.get("notes")), staff_visible: fd.get("staff_visible") === "on", items: itemsFrom(fd), walls: wallsFrom(fd) })
     .eq("id", id)
     .select("event_id")
     .single();
@@ -103,6 +114,7 @@ export async function copyLayout(id: string, asTemplate: boolean) {
       room_id: src!.room_id,
       setup_id: src!.setup_id,
       items: src!.items,
+      walls: src!.walls,
       notes: src!.notes,
       event_id: asTemplate ? null : src!.event_id,
       booking_id: asTemplate ? null : src!.booking_id,
@@ -141,7 +153,13 @@ export async function saveRoomPlan(roomId: string, fd: FormData) {
   } catch {
     area = null;
   }
-  const raw = { width, depth, items: itemsFrom(fd), bg: opt(fd.get("bg")) ?? undefined, area: area ?? undefined };
+  // Vikväggarnas läge kommer från formuläret, geometrin från den sparade planen.
+  const { data: cur } = await supabase.from("rooms").select("plan").eq("id", roomId).single();
+  const shut = new Set(wallsFrom(fd) ?? []);
+  const oldWalls = planFor(cur?.plan ?? null, null).walls ?? [];
+  const f = cur?.plan && Number((cur.plan as { width?: number }).width) > 0 ? width / Number((cur.plan as { width: number }).width) : 1;
+  const walls = oldWalls.map((w) => ({ ...w, x1: w.x1 * f, y1: w.y1 * f, x2: w.x2 * f, y2: w.y2 * f, closed: shut.has(w.id) }));
+  const raw = { width, depth, items: itemsFrom(fd), bg: opt(fd.get("bg")) ?? undefined, area: area ?? undefined, walls };
   // planFor validerar bakgrundens sökväg och golvytan.
   const plan = planFor(raw, null);
   const { error } = await supabase.from("rooms").update({ plan }).eq("id", roomId);

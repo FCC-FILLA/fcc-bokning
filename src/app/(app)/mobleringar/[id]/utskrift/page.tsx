@@ -43,7 +43,7 @@ export default async function LayoutPrint({ params }: { params: Promise<{ id: st
           {e?.participants ? ` · ${e.participants} gäster` : ""}
         </p>
       </header>
-      <LayoutSheet plan={planFor(r.plan, r.kvm)} items={parseItems(l.items)} types={types} notes={l.notes} />
+      <LayoutSheet plan={planFor(r.plan, r.kvm)} items={parseItems(l.items)} types={types} notes={l.notes} walls={l.walls} />
       <style>{"@page { size: A4 landscape; margin: 10mm; }"}</style>
     </div>
   );

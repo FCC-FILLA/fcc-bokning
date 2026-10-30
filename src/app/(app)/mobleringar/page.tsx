@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { canManageStaff, isAdmin, requireProfile } from "@/lib/auth";
 import { fmtDate } from "@/lib/datum";
-import { countItems, focusView, parseItems, planFor } from "@/lib/moblering";
+import { closedWalls, countItems, focusView, parseItems, planFor } from "@/lib/moblering";
 import { loadFurniture } from "@/lib/moblering-server";
 import { createClient } from "@/lib/supabase/server";
 import { LayoutDrawing } from "@/components/layout-drawing";
 import { createLayout } from "./actions";
 
-type Row = { id: string; name: string; room_id: string; setup_id: string | null; event_id: string | null; items: unknown; updated_at: string; events: { title: string } | null };
+type Row = { id: string; name: string; room_id: string; setup_id: string | null; event_id: string | null; items: unknown; updated_at: string; walls: string[] | null; events: { title: string } | null };
 type RoomRow = { id: string; name: string; kvm: number | null; plan: unknown; parent_id: string | null; bookable: boolean };
 
 export default async function LayoutsPage({ searchParams }: { searchParams: Promise<{ fel?: string }> }) {
@@ -17,7 +17,7 @@ export default async function LayoutsPage({ searchParams }: { searchParams: Prom
   const admin = isAdmin(p);
   const supabase = await createClient();
   const [{ data: l }, { data: rm }, { data: st }, types] = await Promise.all([
-    supabase.from("layouts").select("id, name, room_id, setup_id, event_id, items, updated_at, events(title)").order("updated_at", { ascending: false }).limit(200),
+    supabase.from("layouts").select("id, name, room_id, setup_id, event_id, items, updated_at, walls, events(title)").order("updated_at", { ascending: false }).limit(200),
     supabase.from("rooms").select("id, name, kvm, plan, parent_id, bookable").eq("active", true).order("sort_order"),
     supabase.from("setups").select("id, name").order("sort_order"),
     loadFurniture(supabase),
@@ -36,7 +36,7 @@ export default async function LayoutsPage({ searchParams }: { searchParams: Prom
     return (
       <Link key={x.id} href={`/mobleringar/${x.id}`} className="card overflow-hidden hover:shadow-md transition-shadow grid">
         <div className="border-b border-line bg-white">
-          <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} view={focusView(planFor(room?.plan, room?.kvm ?? null), items)} colors={colors} numbers={false} grid={false} className="block" />
+          <LayoutDrawing plan={planFor(room?.plan, room?.kvm ?? null)} items={items} view={focusView(planFor(room?.plan, room?.kvm ?? null), items)} closed={closedWalls(planFor(room?.plan, room?.kvm ?? null), x.walls)} colors={colors} numbers={false} grid={false} className="block" />
         </div>
         <div className="p-3 grid gap-0.5">
           <span className="font-semibold">{x.name}</span>

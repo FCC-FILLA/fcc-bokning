@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { LayoutDrawing } from "@/components/layout-drawing";
 import {
-  GEN_LABEL, countItems, focusView, generate, newItem, uid,
+  GEN_LABEL, closedWalls, countItems, focusView, generate, newItem, uid,
   type FurnitureType, type GenKind, type LayoutItem, type RoomPlan,
 } from "@/lib/moblering";
 
@@ -23,16 +23,20 @@ type Props = {
   setups?: { id: string; name: string }[];
   fields?: { name: string; setup_id: string | null; notes: string | null; staff_visible: boolean };
   guests?: number | null;
+  /** Ritningens valda stängda vikväggar (null = lokalens standard). */
+  walls?: string[] | null;
   kvm?: number | null;
 };
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, readOnly, capacities = {}, setups = [], fields, guests, kvm }: Props) {
+export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, readOnly, capacities = {}, setups = [], fields, guests, kvm, walls }: Props) {
   const roomMode = mode === "room";
   const [items, setItems] = useState<LayoutItem[]>(initial);
   const [dims, setDims] = useState({ width: initialPlan.width, depth: initialPlan.depth });
   const [area, setArea] = useState(initialPlan.area);
+  const [shut, setShut] = useState<Set<string>>(() => closedWalls(initialPlan, walls));
+  const toggleWall = (id: string) => setShut((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [snap, setSnap] = useState(0.1);
   // Hela våningsplanet är ritat; börja inzoomat på lokalens golvyta (eller det som redan är möblerat).
@@ -55,7 +59,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
   const drag = useRef<Drag | null>(null);
   const past = useRef<LayoutItem[][]>([]);
   const future = useRef<LayoutItem[][]>([]);
-  const [saved] = useState(() => JSON.stringify({ items: initial, dims: { width: initialPlan.width, depth: initialPlan.depth }, area: initialPlan.area }));
+  const [saved] = useState(() => JSON.stringify({ items: initial, dims: { width: initialPlan.width, depth: initialPlan.depth }, area: initialPlan.area, shut: [...closedWalls(initialPlan, walls)].sort() }));
   const [submitting, setSubmitting] = useState(false);
 
   const byId = useMemo(() => new Map(types.map((t) => [t.id, t])), [types]);
@@ -63,7 +67,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
   const names = useMemo(() => Object.fromEntries(types.map((t) => [t.id, t.name])), [types]);
   const palette = types.filter((t) => t.active && (roomMode ? t.shape === "fixed" || t.id === "scen" : t.shape !== "fixed"));
   const plan: RoomPlan = roomMode ? { ...initialPlan, width: dims.width, depth: dims.depth, items: [], area } : initialPlan;
-  const dirty = JSON.stringify({ items, dims, area }) !== saved;
+  const dirty = JSON.stringify({ items, dims, area, shut: [...shut].sort() }) !== saved;
   // Med planritning som bakgrund är proportionerna låsta: ändrad bredd = ändrad skala, och allt ritat följer med.
   const rescale = (width: number) => {
     const f = width / dims.width;
@@ -238,6 +242,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
       className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_280px] items-start"
     >
       <input type="hidden" name="items" value={JSON.stringify(items)} />
+      <input type="hidden" name="walls" value={JSON.stringify([...shut])} />
 
       {/* Möbler */}
       <aside className="card p-3 grid gap-2 print:hidden lg:sticky lg:top-28">
@@ -301,6 +306,18 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
               <option value={0}>fritt</option><option value={0.1}>10 cm</option><option value={0.25}>25 cm</option><option value={0.5}>50 cm</option><option value={1}>1 m</option>
             </select>
           </label>
+          {(initialPlan.walls ?? []).length > 0 && (
+            <span className="flex flex-wrap items-center gap-1 text-sm">
+              <span className="text-muted">{roomMode ? "Vikväggar stängda som standard:" : "Vikväggar:"}</span>
+              {initialPlan.walls!.map((w) => (
+                <button key={w.id} type="button" disabled={readOnly} onClick={() => toggleWall(w.id)} aria-pressed={shut.has(w.id)}
+                  className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${shut.has(w.id) ? "border-fg bg-fg text-white" : "border-line text-muted"}`}
+                  title={shut.has(w.id) ? "Stängd – klicka för att öppna" : "Öppen – klicka för att stänga"}>
+                  {w.name}
+                </button>
+              ))}
+            </span>
+          )}
           {!roomMode && <label className="flex items-center gap-1.5 text-sm"><input type="checkbox" checked={numbers} onChange={(e) => setNumbers(e.target.checked)} /> Bordsnummer</label>}
           <span className="flex-1" />
           {dirty && !readOnly && <span className="text-sm text-warn">Ej sparat</span>}
@@ -322,6 +339,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
             className="block select-none"
             title={fields?.name}
             widthPct={zoom * 100}
+            closed={shut}
             showArea={roomMode || items.length === 0}
           />
         </div>

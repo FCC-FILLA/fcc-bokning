@@ -16,7 +16,7 @@ export type StaffEventInfo = {
   responsible_email: string | null;
   bookings: { room: string; starts_at: string; ends_at: string }[];
   documents: { id: string; name: string; url: string | null }[];
-  layouts?: { id: string; name: string; room: string; notes: string | null; items: unknown; plan: unknown; kvm: number | null; starts_at: string | null }[];
+  layouts?: { id: string; name: string; room: string; notes: string | null; items: unknown; plan: unknown; kvm: number | null; starts_at: string | null; walls?: string[] | null }[];
   furniture?: { id: string; name: string; color: string | null; sort_order: number }[];
   run_sheet?: RunSheetItem[];
 };
@@ -58,7 +58,7 @@ export function EventInfo({ info, docHref, functionId }: { info: StaffEventInfo;
         {(info.layouts ?? []).map((l) => (
           <div key={l.id} className="grid gap-1">
             <p className="font-semibold">Möblering: {l.name} <span className="font-normal text-muted">· {l.room}{l.starts_at ? ` · ${fmtDate(l.starts_at)} ${fmtTime(l.starts_at)}` : ""}</span></p>
-            <LayoutSheet compact plan={planFor(l.plan, l.kvm)} items={parseItems(l.items)} types={info.furniture ?? []} notes={l.notes} />
+            <LayoutSheet compact plan={planFor(l.plan, l.kvm)} items={parseItems(l.items)} types={info.furniture ?? []} notes={l.notes} walls={l.walls} />
           </div>
         ))}
         {info.documents.length > 0 && (

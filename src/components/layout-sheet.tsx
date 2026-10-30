@@ -1,10 +1,10 @@
 import { LayoutDrawing } from "@/components/layout-drawing";
-import { countItems, focusView, type FurnitureType, type LayoutItem, type RoomPlan } from "@/lib/moblering";
+import { closedWalls, countItems, focusView, type FurnitureType, type LayoutItem, type RoomPlan } from "@/lib/moblering";
 
 /** Ritningen med ställ-lista och instruktioner. Används för utskrift och på personalens pass. */
 export function LayoutSheet({
-  plan, items, types, notes, compact = false,
-}: { plan: RoomPlan; items: LayoutItem[]; types: Pick<FurnitureType, "id" | "name" | "color" | "sort_order">[]; notes?: string | null; compact?: boolean }) {
+  plan, items, types, notes, compact = false, walls,
+}: { walls?: string[] | null; plan: RoomPlan; items: LayoutItem[]; types: Pick<FurnitureType, "id" | "name" | "color" | "sort_order">[]; notes?: string | null; compact?: boolean }) {
   const { per, chairs } = countItems(items);
   const byId = new Map(types.map((t) => [t.id, t]));
   const rows = [...per].sort((a, b) => (byId.get(a[0])?.sort_order ?? 99) - (byId.get(b[0])?.sort_order ?? 99));
@@ -15,6 +15,7 @@ export function LayoutSheet({
           plan={plan}
           items={items}
           view={focusView(plan, items)}
+          closed={closedWalls(plan, walls)}
           colors={Object.fromEntries(types.map((t) => [t.id, t.color]))}
           names={Object.fromEntries(types.map((t) => [t.id, t.name]))}
           className="block"
