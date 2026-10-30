@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { dayLong, dayShort, fmtDayMonth, fmtTime, isoToDate, isoWeek } from "@/lib/datum";
 import { eventsOn, nextDays, roomStates, staffing, type DaySpan, type ScreenFeed } from "@/lib/skarm";
@@ -52,6 +52,30 @@ export function Board({ feed }: { feed: ScreenFeed }) {
   const rooms = roomStates(feed.rooms, spans, now);
   const time = fmtTime(now.toISOString());
 
+  // Veckan scrollar inte: bara hela dagar som får plats visas, resten döljs.
+  const weekRef = useRef<HTMLDivElement>(null);
+  const [shownDays, setShownDays] = useState(upcoming.length);
+  const weekKey = JSON.stringify(upcoming.map((d) => [d.date, d.spans.map((x) => x.event.id)]));
+  useLayoutEffect(() => {
+    const box = weekRef.current;
+    if (!box) return;
+    const fit = () => {
+      const days = [...box.querySelectorAll<HTMLElement>(".skarm-day")];
+      days.forEach((d) => (d.hidden = false));
+      if (getComputedStyle(box).overflow === "visible") return setShownDays(days.length);
+      const bottom = box.getBoundingClientRect().bottom;
+      // Första dagen som inte får plats hela, och alla efter den, döljs.
+      let shown = days.findIndex((d) => d.getBoundingClientRect().bottom > bottom + 1);
+      if (shown === -1) shown = days.length;
+      days.slice(shown).forEach((d) => (d.hidden = true));
+      setShownDays(shown);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [weekKey]);
+
   return (
     <div className="skarm">
       <header className="skarm-head">
@@ -102,9 +126,12 @@ export function Board({ feed }: { feed: ScreenFeed }) {
         <section className="skarm-col">
           <div className="skarm-sec">
             <h2>Veckan framåt</h2>
-            <span>{weekCount ? `${weekCount} event kommande 7 dagar` : "Inga event kommande 7 dagar"}</span>
+            <span>
+              {weekCount ? `${weekCount} event kommande 7 dagar` : "Inga event kommande 7 dagar"}
+              {shownDays < upcoming.length && ` · visar ${shownDays} av ${upcoming.length} dagar`}
+            </span>
           </div>
-          <div className="skarm-scroll">
+          <div className="skarm-fit" ref={weekRef}>
             <div className="skarm-week">
               {upcoming.map(({ date, spans }) => (
                 <div key={date} className={`skarm-day${spans.length ? "" : " is-empty"}`}>
