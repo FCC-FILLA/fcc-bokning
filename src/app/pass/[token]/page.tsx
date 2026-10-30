@@ -78,7 +78,7 @@ export default async function LinkPage({
       </div>
       {(s.event || s.room) && <p className="text-sm text-muted">{[s.event, s.room].filter(Boolean).join(" · ")}</p>}
       {s.note && <p className="text-sm">{s.note}</p>}
-      {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/pass/${token}/fil/${id}`} />}
+      {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/pass/${token}/fil/${id}`} functionId={s.function} />}
       {s.status === "inbjuden" && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line pt-2">
           <form action={respond.bind(null, token, s.id, true)}><button className="btn btn-primary" type="submit">{supplier ? "Bekräfta bokningen" : "Ja, jag tar passet"}</button></form>

@@ -17,6 +17,7 @@ import { StatusPill } from "@/components/status-pill";
 import { EventStaffing } from "@/components/event-staffing";
 import { EventPortalAdmin } from "@/components/event-portal-admin";
 import { EventLayouts } from "@/components/event-layouts";
+import { EventRunSheet } from "@/components/event-run-sheet";
 import { EventTabs } from "@/components/event-tabs";
 import { EventInvoicing } from "@/components/event-invoicing";
 import { saveEventAsTemplate } from "../../mallar/actions";
@@ -356,6 +357,7 @@ export default async function EventPage({
           ),
           genomforande: (
             <>
+              <EventRunSheet eventId={id} />
               <EventLayouts eventId={id} />
               <EventPortalAdmin eventId={id} sent={sp.skickad} />
             </>

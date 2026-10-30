@@ -1,3 +1,5 @@
+import { RunSheetView } from "@/components/run-sheet-view";
+import type { RunSheetItem } from "@/lib/korschema";
 import { deliverNotifications } from "@/lib/notiser";
 import type { CSSProperties } from "react";
 import type { Metadata } from "next";
@@ -24,6 +26,7 @@ type Portal = {
   settings: Record<string, string>;
   bookings: { room: string; starts_at: string; ends_at: string }[];
   quotes: { number: number; title: string | null; status: string; share_token: string; sent_at: string | null; accepted_at: string | null; valid_until: string | null; total_ex_vat: number }[];
+  run_sheet?: RunSheetItem[];
   checklist: { id: string; title: string; note: string | null; due_date: string | null; can_check: boolean; done_at: string | null; done_by: string | null }[];
   documents: { id: string; name: string; mime: string | null; size: number | null; url: string | null; created_at: string }[];
 };
@@ -119,6 +122,13 @@ export default async function EventPortalPage({ params, searchParams }: { params
                 </ul>
               </div>
             ))}
+          </section>
+        )}
+
+        {(doc.run_sheet ?? []).length > 0 && (
+          <section className="grid gap-3">
+            <h2 className="font-display text-xl font-semibold">Körschema</h2>
+            <div className="card p-4"><RunSheetView items={doc.run_sheet!} /></div>
           </section>
         )}
 

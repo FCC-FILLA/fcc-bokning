@@ -934,3 +934,25 @@ describe("möbler per dag", () => {
     ]);
   });
 });
+
+describe("körschema", () => {
+  it("visar kundens och personalens punkter på eventlänken och i personalinfon", async () => {
+    const ev = await book("Körschema-test", "bekraftad", "Birka", "2028-04-01T17:00+02", "2028-04-01T23:00+02");
+    await db.query(`insert into run_sheet_items (event_id, starts_at, title, customer_visible, staff_visible) values
+      ($1, '2028-04-01T18:00+02', 'Insläpp', true, true),
+      ($1, '2028-04-01T17:30+02', 'Personalgenomgång', false, true),
+      ($1, '2028-04-01T19:00+02', 'Middag', true, false)`, [ev]);
+    const tok = (await db.query<{ share_token: string }>("select share_token from events where id = $1", [ev])).rows[0].share_token;
+    await db.exec("set role anon");
+    try {
+      const p = await db.query<{ d: { title: string; run_sheet: { title: string }[] } }>("select event_portal($1) as d", [tok]);
+      expect(p.rows[0].d.title).toBe("Körschema-test");
+      expect(p.rows[0].d.run_sheet.map((x) => x.title)).toEqual(["Insläpp", "Middag"]);
+    } finally {
+      await db.exec("reset role");
+    }
+    const s = await db.query<{ d: { run_sheet: { title: string }[]; layouts: unknown[] } }>("select event_staff_info($1) as d", [ev]);
+    expect(s.rows[0].d.run_sheet.map((x) => x.title)).toEqual(["Personalgenomgång", "Insläpp"]);
+    expect(Array.isArray(s.rows[0].d.layouts)).toBe(true);
+  });
+});

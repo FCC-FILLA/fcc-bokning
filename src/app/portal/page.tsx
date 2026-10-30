@@ -155,7 +155,7 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
                     </div>
                     {(s.event || s.room) && <p className="text-sm text-muted">{[s.event, s.room].filter(Boolean).join(" · ")}</p>}
                     {s.note && <p className="text-sm">{s.note}</p>}
-                    {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/portal/fil/${id}`} />}
+                    {s.event_info && <EventInfo info={s.event_info} docHref={(id) => `/portal/fil/${id}`} functionId={s.function} />}
                     {s.my_status === "tilldelad" && <TimeReport s={s} tab={tab} now={now} />}
                     {tab === "lediga" && (
                       <div className="flex flex-wrap items-center gap-3 pt-1">
