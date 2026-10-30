@@ -162,6 +162,7 @@ function readStaff(fd: FormData) {
     email: opt(fd.get("email"))?.toLowerCase() ?? null,
     phone: opt(fd.get("phone")),
     company: opt(fd.get("company")),
+    ...(fd.has("employment_number") ? { employment_number: opt(fd.get("employment_number")) } : {}),
     hourly_rate: num(fd.get("hourly_rate")),
     note: opt(fd.get("note")),
   };

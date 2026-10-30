@@ -16,7 +16,7 @@ export type TimeRow = {
   attested_by: string | null;
   attested_at: string | null;
   shifts: Pick<Shift, "id" | "starts_at" | "ends_at" | "function_id" | "hourly_rate" | "title"> & { events: { title: string } | null };
-  staff: Pick<Staff, "id" | "name" | "kind" | "hourly_rate" | "profile_id" | "company">;
+  staff: Pick<Staff, "id" | "name" | "kind" | "hourly_rate" | "profile_id" | "company"> & { employment_number: string | null };
 };
 
 /** Alla tilldelade pass som börjar en viss månad, med tidrapport. */
@@ -26,7 +26,7 @@ export async function loadMonth(supabase: SupabaseClient, month: string) {
     supabase
       .from("shift_assignments")
       .select(
-        "id, staff_id, status, actual_start, actual_end, break_minutes, report_comment, reported_at, attest_status, attest_comment, attested_by, attested_at, shifts!inner(id, starts_at, ends_at, function_id, hourly_rate, title, events(title)), staff!inner(id, name, kind, hourly_rate, profile_id, company)",
+        "id, staff_id, status, actual_start, actual_end, break_minutes, report_comment, reported_at, attest_status, attest_comment, attested_by, attested_at, shifts!inner(id, starts_at, ends_at, function_id, hourly_rate, title, events(title)), staff!inner(id, name, kind, hourly_rate, profile_id, company, employment_number)",
       )
       .eq("status", "tilldelad")
       .gte("shifts.starts_at", dayStartIso(first))

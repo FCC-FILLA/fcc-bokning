@@ -6,7 +6,8 @@ import { ATTEST_LABEL, KIND_LABEL, monthLabel, type AttestStatus } from "@/lib/p
 import { createClient } from "@/lib/supabase/server";
 import { loadMonth, type MonthRow } from "@/lib/tid";
 import { ConfirmButton } from "@/components/confirm-button";
-import { attest, attestAll, lockMonth, reject, savePayrollEmail, setTime, unlockMonth } from "./actions";
+import { parseObSettings } from "@/lib/lon";
+import { attest, attestAll, lockMonth, reject, savePayrollEmail, savePayrollOb, setTime, unlockMonth } from "./actions";
 
 export const metadata = { title: "Tid och attest" };
 
@@ -33,10 +34,12 @@ export default async function TimePage({
   const manager = canManageStaff(profile);
   const month = /^\d{4}-\d{2}$/.test(sp.manad ?? "") ? sp.manad! : todayDate().slice(0, 7);
   const supabase = await createClient();
-  const [{ rows, period, lockedByName }, { data: setting }] = await Promise.all([
+  const [{ rows, period, lockedByName }, { data: setting }, { data: obSetting }] = await Promise.all([
     loadMonth(supabase, month),
     supabase.from("app_settings").select("value").eq("key", "payroll_email").maybeSingle(),
+    supabase.from("app_settings").select("value").eq("key", "payroll_ob").maybeSingle(),
   ]);
+  const ob = parseObSettings(obSetting?.value as string | undefined);
   const payrollEmail = (setting?.value as string | undefined) ?? "";
   const locked = !!period?.locked_at;
   const now = new Date().toISOString();
@@ -54,7 +57,7 @@ export default async function TimePage({
   for (const r of shown) byPerson.set(r.staff_id, [...(byPerson.get(r.staff_id) ?? []), r]);
 
   const mailto = payrollEmail
-    ? `mailto:${payrollEmail}?subject=${encodeURIComponent(`Tidsunderlag ${monthLabel(month)}`)}&body=${encodeURIComponent(
+    ? `mailto:${payrollEmail}?subject=${encodeURIComponent(`Löneunderlag ${monthLabel(month)}`)}&body=${encodeURIComponent(
         `Hej!\n\nHär kommer attesterat tidsunderlag för ${monthLabel(month)}: ${attested.length} pass, ${hours.toLocaleString("sv-SE")} timmar, ${fmtKr(amount)}.\n\nExcel-filen är bifogad.\n\nHälsningar`,
       )}`
     : null;
@@ -118,7 +121,8 @@ export default async function TimePage({
               />
             </form>
           )}
-          <a className="btn" href={`/personal/tid/excel?manad=${month}`}>Ladda ner Excel</a>
+          <a className="btn" href={`/personal/tid/lon?manad=${month}`}>Löneunderlag (Excel)</a>
+          <a className="btn btn-ghost" href={`/personal/tid/excel?manad=${month}`}>Tidsunderlag per pass (Excel)</a>
           {mailto && locked && <a className="btn" href={mailto}>Mejla ekonomi</a>}
           {locked && isAdmin(profile) && (
             <form action={unlockMonth.bind(null, month)}>
@@ -133,8 +137,35 @@ export default async function TimePage({
               <input className="input w-72" id="payroll_email" name="payroll_email" type="email" defaultValue={payrollEmail} placeholder="ekonomi@filadelfiacc.se" />
             </div>
             <button className="btn btn-ghost" type="submit">Spara</button>
-            <span className="text-xs text-muted pb-2">Underlaget mejlas automatiskt som Excel när månaden låses.</span>
+            <span className="text-xs text-muted pb-2">Löneunderlaget mejlas automatiskt som Excel när månaden låses.</span>
           </form>
+        )}
+        {isAdmin(profile) && (
+          <details className="border-t border-line pt-3">
+            <summary className="cursor-pointer text-sm font-medium">Lönearter och OB-tider</summary>
+            <form action={savePayrollOb.bind(null, month)} className="mt-3 space-y-3">
+              <p className="text-xs text-muted">
+                Löneunderlaget får en rad med alla arbetade timmar per person och en rad per OB-löneart. Lör, sön och helgdagar (inkl. påsk-, midsommar-, jul- och nyårsafton) räknas som helg hela dygnet. Rasten dras av proportionerligt.
+              </p>
+              <div className="field w-48"><label className="label" htmlFor="hourly_title">Titel för timlön</label><input className="input" id="hourly_title" name="hourly_title" defaultValue={ob.hourlyTitle} /></div>
+              {([["evening", ob.evening, true], ["night", ob.night, true], ["weekend", ob.weekend, false]] as const).map(([k, r, times]) => (
+                <div key={k} className="flex flex-wrap items-end gap-2">
+                  <div className="field w-24"><label className="label" htmlFor={`${k}_code`}>Löneart</label><input className="input" id={`${k}_code`} name={`${k}_code`} defaultValue={r.code} /></div>
+                  <div className="field w-48"><label className="label" htmlFor={`${k}_title`}>Titel</label><input className="input" id={`${k}_title`} name={`${k}_title`} defaultValue={r.title} /></div>
+                  {times && "from" in r ? (
+                    <>
+                      <div className="field w-28"><label className="label" htmlFor={`${k}_from`}>Från</label><input className="input" type="time" id={`${k}_from`} name={`${k}_from`} defaultValue={r.from} /></div>
+                      <div className="field w-28"><label className="label" htmlFor={`${k}_to`}>Till</label><input className="input" type="time" id={`${k}_to`} name={`${k}_to`} defaultValue={r.to} /></div>
+                      <span className="text-xs text-muted pb-2">vardagar</span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted pb-2">hela dygnet lör, sön och helgdagar</span>
+                  )}
+                </div>
+              ))}
+              <button className="btn" type="submit">Spara OB-regler</button>
+            </form>
+          </details>
         )}
       </section>
 

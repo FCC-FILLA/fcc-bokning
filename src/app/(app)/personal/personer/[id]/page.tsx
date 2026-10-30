@@ -118,6 +118,7 @@ export default async function PersonPage({
             </div>
             <div className="field"><label className="label" htmlFor="name">Namn</label><input className="input" id="name" name="name" required defaultValue={person.name} /></div>
             <div className="field"><label className="label" htmlFor="company">Företag</label><input className="input" id="company" name="company" defaultValue={person.company ?? ""} /></div>
+            <div className="field"><label className="label" htmlFor="employment_number">Anställningsnr</label><input className="input" id="employment_number" name="employment_number" defaultValue={person.employment_number ?? ""} /></div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="field"><label className="label" htmlFor="email">E-post</label><input className="input" id="email" name="email" type="email" defaultValue={person.email ?? ""} /></div>
