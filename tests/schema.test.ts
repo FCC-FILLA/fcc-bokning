@@ -1152,3 +1152,27 @@ describe("granskning: rättningar", () => {
     expect(r.rows[0].needed).toBe(5);
   });
 });
+describe("kontorsskärm", () => {
+  it("visar bara med rätt nyckel, utan förfrågningar och avbokade, och läcker inga interna fält", async () => {
+    const token = (await db.query<{ value: string }>("select value from app_settings where key = 'screen_token'")).rows[0].value;
+    expect(token).toMatch(/^[0-9a-f-]{36}$/);
+    await db.query("insert into events (title, status) values ('Fel status', 'forfragan')");
+    const ok = await book("Skärmtest", "bekraftad", "Birka", new Date(Date.now() + 3600e3).toISOString(), new Date(Date.now() + 7200e3).toISOString());
+    await book("Avbokat skärmtest", "avbokad", "Birka", new Date(Date.now() + 3600e3).toISOString(), new Date(Date.now() + 7200e3).toISOString());
+    await db.query("update events set internal_notes = 'hemligt' where id = $1", [ok]);
+
+    await db.exec("grant usage on schema public to anon; set role anon;");
+    try {
+      const wrong = await db.query<{ f: unknown }>("select screen_feed(gen_random_uuid()) as f");
+      expect(wrong.rows[0].f).toBeNull();
+      const r = await db.query<{ f: { events: { title: string }[]; rooms: { name: string }[] } }>("select screen_feed($1::uuid) as f", [token]);
+      const titles = r.rows[0].f.events.map((e) => e.title);
+      expect(titles).toContain("Skärmtest");
+      expect(titles).not.toContain("Avbokat skärmtest");
+      expect(JSON.stringify(r.rows[0].f)).not.toContain("hemligt");
+      expect(r.rows[0].f.rooms.some((x) => x.name.startsWith("Kök"))).toBe(false);
+    } finally {
+      await db.exec("reset role;");
+    }
+  });
+});

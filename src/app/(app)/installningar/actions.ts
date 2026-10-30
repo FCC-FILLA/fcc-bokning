@@ -134,3 +134,15 @@ export async function sendTestMail() {
   revalidatePath("/installningar/epost");
   redirect("/installningar/epost?test=1");
 }
+
+/** Ny nyckel till kontorsskärmen. Den gamla länken slutar fungera direkt. */
+export async function rotateScreenToken() {
+  if (!isAdmin(await requireProfile())) redirect("/installningar/skarm?fel=" + encodeURIComponent("Bara administratörer kan byta nyckel."));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert({ key: "screen_token", value: crypto.randomUUID(), updated_at: new Date().toISOString() });
+  if (error) redirect("/installningar/skarm?fel=" + encodeURIComponent("Det gick inte att byta nyckel."));
+  revalidatePath("/installningar/skarm");
+  redirect("/installningar/skarm?ny=1");
+}
