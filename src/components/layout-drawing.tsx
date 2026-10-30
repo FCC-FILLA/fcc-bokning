@@ -1,5 +1,5 @@
 import type { PointerEvent as RPointerEvent, Ref } from "react";
-import { chairPositions, type LayoutItem, type RoomPlan } from "@/lib/moblering";
+import { chairPositions, type Guide, type LayoutItem, type RoomPlan } from "@/lib/moblering";
 
 const TABLE_FILL = "#ffffff";
 const TABLE_STROKE = "#60272b";
@@ -48,11 +48,13 @@ type Props = {
   view?: { x: number; y: number; w: number; h: number };
   /** Visa den möblerbara golvytan streckad. */
   showArea?: boolean;
+  /** Hjälplinjer när ett objekt fäster mot ett annat. */
+  guides?: Guide[];
 };
 
 export function LayoutDrawing({
   plan, items, colors = {}, names = {}, selected, numbers = true, grid = true, editFixed = false, marquee, svgRef,
-  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100, showArea = false, view, closed,
+  onItemDown, onBgDown, onMove, onUp, className, title, widthPct = 100, showArea = false, view, closed, guides,
 }: Props) {
   const W = plan.width;
   const D = plan.depth;
@@ -160,6 +162,16 @@ export function LayoutDrawing({
       </text>
       {plan.items.map((i) => draw(i, true))}
       {items.map((i) => draw(i, false))}
+      {guides?.map((g, k) => (
+        <g key={`g${k}`} style={{ pointerEvents: "none" }}>
+          <line x1={g.x1} y1={g.y1} x2={g.x2} y2={g.y2} stroke="#e11d48" strokeWidth={0.04} strokeDasharray={g.label ? undefined : "0.15 0.1"} />
+          {g.label && (
+            <text x={(g.x1 + g.x2) / 2} y={(g.y1 + g.y2) / 2 - 0.18} textAnchor="middle" fontSize={0.3} fontWeight={700} fill="#e11d48" stroke="#fff" strokeWidth={0.06} paintOrder="stroke">
+              {g.label}
+            </text>
+          )}
+        </g>
+      ))}
       {marquee && <rect x={marquee.x} y={marquee.y} width={marquee.w} height={marquee.h} fill="rgba(37,99,235,.08)" stroke={SEL} strokeWidth={0.04} strokeDasharray="0.2 0.1" />}
     </svg>
   );

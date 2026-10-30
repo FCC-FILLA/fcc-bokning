@@ -18,4 +18,5 @@ export type LayoutRow = {
   staff_visible: boolean;
   walls: string[] | null;
   updated_at: string;
+  version?: number;
 };

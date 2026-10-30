@@ -185,7 +185,12 @@ export type GenOptions = {
   aisle: number;
   /** Förskjut varannan rad (bankett). */
   stagger?: boolean;
+  /** Avstånd mellan borden, kant till kant (m). Standard 1,35. */
+  gap?: number;
 };
+
+/** Standardavstånd mellan bord, kant till kant. */
+export const DEFAULT_TABLE_GAP = 1.35;
 
 export const GEN_LABEL: Record<GenKind, string> = {
   bankett: "Bankett (runda bord)",
@@ -272,8 +277,8 @@ export function generate(plan: RoomPlan, types: FurnitureType[], o: GenOptions):
     const mingel = o.kind === "mingel";
     const t = mingel ? type(o.table, "stabord80", "stabord") : type(o.table, "rund150", "rund180");
     const per = mingel ? 0 : Math.max(1, Math.min(o.perTable ?? t.default_chairs ?? 8, t.max_chairs || 40));
-    // Avstånd mitt till mitt: bordet + stolar på båda sidor + passage.
-    const pitch = mingel ? 3.2 : Number(t.width_m) + 1.5;
+    // Avstånd mitt till mitt: bordet + valt avstånd mellan borden (kant till kant).
+    const pitch = mingel ? 3.2 : Number(t.width_m) + Math.max(0.3, o.gap ?? DEFAULT_TABLE_GAP);
     const guestsPer = mingel ? 8 : per;
     const r = mingel ? Number(t.width_m) / 2 : Number(t.width_m) / 2 + 0.6;
     let rowNo = 0;
@@ -312,3 +317,100 @@ export function focusView(plan: RoomPlan, items: LayoutItem[], pad = 2): Area {
   const y1 = Math.min(plan.depth, Math.max(...boxes.map((b) => b.y1)) + pad);
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
+
+// ---------- Fäst mot andra objekt ----------
+
+/** Halva bredden/djupet längs x och y, med hänsyn till vridning (räknat som omslutande rektangel). */
+export function halfExtents(i: Pick<LayoutItem, "w" | "d" | "r">) {
+  const a = (((i.r % 180) + 180) % 180) * (Math.PI / 180);
+  const c = Math.abs(Math.cos(a));
+  const s = Math.abs(Math.sin(a));
+  return { hw: (i.w * c + i.d * s) / 2, hd: (i.w * s + i.d * c) / 2 };
+}
+
+const isTable = (i: LayoutItem) => i.shape === "round" || i.shape === "rect";
+
+export type Guide = { x1: number; y1: number; x2: number; y2: number; label?: string };
+
+/**
+ * Var ett objekt som flyttas till (a.x, a.y) ska fästa mot andra objekt: samma mittlinje, samma kant, kant i kant
+ * eller (för bord) valt avstånd mellan borden. Ger förskjutningen per axel (0 om inget är nära) och hjälplinjer.
+ */
+export function snapToObjects(a: LayoutItem, others: LayoutItem[], gap: number, tol = 0.15) {
+  const A = halfExtents(a);
+  type Hit = { d: number; v: number; guide: Guide };
+  let bx: Hit | null = null;
+  let by: Hit | null = null;
+  const consider = (axis: "x" | "y", target: number, guide: Guide) => {
+    const cur = axis === "x" ? a.x : a.y;
+    const d = Math.abs(target - cur);
+    if (d > tol) return;
+    const best = axis === "x" ? bx : by;
+    if (best && best.d <= d) return;
+    const hit = { d, v: target - cur, guide };
+    if (axis === "x") bx = hit; else by = hit;
+  };
+  const cm = (m: number) => `${Math.round(m * 100)} cm`;
+  for (const o of others) {
+    if (o.id === a.id) continue;
+    if (Math.abs(o.x - a.x) > 20 || Math.abs(o.y - a.y) > 20) continue;
+    const O = halfExtents(o);
+    const rowY = Math.abs(o.y - a.y) < A.hd + O.hd;   // ligger bredvid varandra i x-led
+    const colX = Math.abs(o.x - a.x) < A.hw + O.hw;   // ligger ovanför/under varandra
+    const tables = isTable(a) && isTable(o);
+    const vline = (x: number): Guide => ({ x1: x, y1: Math.min(a.y - A.hd, o.y - O.hd), x2: x, y2: Math.max(a.y + A.hd, o.y + O.hd) });
+    const hline = (y: number): Guide => ({ x1: Math.min(a.x - A.hw, o.x - O.hw), y1: y, x2: Math.max(a.x + A.hw, o.x + O.hw), y2: y });
+    // Samma mittlinje och samma kanter.
+    consider("x", o.x, vline(o.x));
+    consider("y", o.y, hline(o.y));
+    consider("x", o.x - O.hw + A.hw, vline(o.x - O.hw));
+    consider("x", o.x + O.hw - A.hw, vline(o.x + O.hw));
+    consider("y", o.y - O.hd + A.hd, hline(o.y - O.hd));
+    consider("y", o.y + O.hd - A.hd, hline(o.y + O.hd));
+    for (const s of [-1, 1]) {
+      if (rowY) {
+        const touch = o.x + s * (O.hw + A.hw);
+        consider("x", touch, vline(o.x + s * O.hw));
+        if (tables) {
+          const t = o.x + s * (O.hw + A.hw + gap);
+          const e0 = o.x + s * O.hw;
+          consider("x", t, { x1: Math.min(e0, e0 + s * gap), y1: o.y, x2: Math.max(e0, e0 + s * gap), y2: o.y, label: cm(gap) });
+        }
+      }
+      if (colX) {
+        const touch = o.y + s * (O.hd + A.hd);
+        consider("y", touch, hline(o.y + s * O.hd));
+        if (tables) {
+          const t = o.y + s * (O.hd + A.hd + gap);
+          const e0 = o.y + s * O.hd;
+          consider("y", t, { x1: o.x, y1: Math.min(e0, e0 + s * gap), x2: o.x, y2: Math.max(e0, e0 + s * gap), label: cm(gap) });
+        }
+      }
+    }
+  }
+  const hx = bx as Hit | null;
+  const hy = by as Hit | null;
+  return { dx: hx?.v ?? null, dy: hy?.v ?? null, guides: [hx?.guide, hy?.guide].filter(Boolean) as Guide[] };
+}
+
+/** Var nästa objekt av samma typ ska hamna: bredvid det senast tillagda, med valt avstånd mellan borden. */
+export function nextTo(last: LayoutItem, t: FurnitureType, gap: number, plan: RoomPlan): { x: number; y: number } | null {
+  const L = halfExtents(last);
+  const N = { hw: Number(t.width_m) / 2, hd: Number(t.depth_m) / 2 };
+  const space = t.shape === "round" || t.shape === "rect" ? gap : 0;
+  const right = plan.area ? plan.area.x + plan.area.w : plan.width;
+  const x = last.x + L.hw + space + N.hw;
+  if (x + N.hw <= right) return { x: round2(x), y: last.y };
+  return null;
+}
+
+/** "Ø150 cm" eller "180 × 80 cm". */
+export function sizeText(t: Pick<FurnitureType, "shape" | "width_m" | "depth_m">) {
+  const cm = (m: number) => Math.round(Number(m) * 100);
+  if (t.shape === "round") return `Ø${cm(t.width_m)} cm`;
+  return `${cm(t.width_m)} × ${cm(t.depth_m)} cm`;
+}
+
+/** Vem som äger möbeln: leverantören om den hyrs in, annars FCC. */
+export const OWN_STOCK = "FCC";
+export const ownerText = (t: Pick<FurnitureType, "supplier">) => t.supplier?.trim() || OWN_STOCK;

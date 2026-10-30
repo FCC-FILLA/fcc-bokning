@@ -202,3 +202,93 @@ export async function saveFurniture(fd: FormData) {
   revalidatePath("/mobleringar", "layout");
   redirect(`${path}?sparad=1`);
 }
+
+/** Koppla ritningen till en bokning (och därmed evenemanget). En mall kopieras så att mallen finns kvar. */
+export async function linkLayout(id: string, fd: FormData) {
+  const path = `/mobleringar/${id}`;
+  await requirePlanner(path);
+  const bookingId = opt(fd.get("booking_id"));
+  if (!bookingId) fail(path, "Välj en bokning.");
+  const supabase = await createClient();
+  const [{ data: l }, { data: b }] = await Promise.all([
+    supabase.from("layouts").select("*").eq("id", id).single(),
+    supabase.from("bookings").select("id, event_id, room_id, setup_id").eq("id", bookingId!).single(),
+  ]);
+  if (!l) fail(path, "Ritningen finns inte.");
+  if (!b) fail(path, "Bokningen finns inte.");
+  if (b!.room_id !== l!.room_id) fail(path, "Bokningen gäller en annan lokal än ritningen.");
+  const keepTemplate = !l!.event_id && fd.get("copy") === "on";
+  let target = id;
+  if (keepTemplate) {
+    const { data, error } = await supabase
+      .from("layouts")
+      .insert({ name: l!.name, room_id: l!.room_id, setup_id: l!.setup_id ?? b!.setup_id, items: l!.items, walls: l!.walls, notes: l!.notes, event_id: b!.event_id, booking_id: b!.id })
+      .select("id")
+      .single();
+    if (error || !data) fail(path, `Kunde inte koppla: ${error?.message ?? "okänt fel"}`);
+    target = data!.id;
+  } else {
+    const { error } = await supabase.from("layouts").update({ event_id: b!.event_id, booking_id: b!.id, setup_id: l!.setup_id ?? b!.setup_id }).eq("id", id);
+    if (error) fail(path, `Kunde inte koppla: ${error.message}`);
+  }
+  if (l!.event_id) revalidatePath(`/evenemang/${l!.event_id}`);
+  revalidatePath(`/evenemang/${b!.event_id}`);
+  revalidatePath("/mobleringar");
+  redirect(`/mobleringar/${target}?kopplad=1`);
+}
+
+/** Ta bort kopplingen till evenemanget. Ritningen blir en mall för lokalen. */
+export async function unlinkLayout(id: string) {
+  const path = `/mobleringar/${id}`;
+  await requirePlanner(path);
+  const supabase = await createClient();
+  const { data: l } = await supabase.from("layouts").select("event_id").eq("id", id).single();
+  const { error } = await supabase.from("layouts").update({ event_id: null, booking_id: null }).eq("id", id);
+  if (error) fail(path, `Kunde inte koppla bort: ${error.message}`);
+  if (l?.event_id) revalidatePath(`/evenemang/${l.event_id}`);
+  revalidatePath("/mobleringar");
+  redirect(`${path}?bortkopplad=1`);
+}
+
+/** Ny möbel eller nytt objekt i ritverktyget, t.ex. ett inhyrt bord. */
+export async function createFurniture(fd: FormData) {
+  const path = "/installningar/moblering";
+  if (!isAdmin(await requireProfile())) fail(path, "Bara administratörer kan lägga till objekt.");
+  const name = opt(fd.get("name"));
+  if (!name) fail(`${path}#nytt`, "Objektet behöver ett namn.");
+  const shape = String(fd.get("shape") ?? "rect");
+  if (!["rect", "round", "chair", "fixed"].includes(shape)) fail(path, "Okänd form.");
+  const num = (k: string) => {
+    const v = opt(fd.get(k));
+    if (v == null) return null;
+    const n = Number(v.replace(",", "."));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  // Mått anges i cm i formuläret.
+  const w = (num("w_cm") ?? 0) / 100;
+  const d = shape === "round" ? w : (num("d_cm") ?? 0) / 100;
+  if (!(w >= 0.1 && w <= 30 && d >= 0.1 && d <= 30)) fail(path, "Ange mått mellan 10 cm och 30 m.");
+  const chairs = shape === "rect" || shape === "round" ? Math.round(num("chairs") ?? 0) : 0;
+  const max = Math.max(chairs, Math.round(num("max") ?? chairs));
+  const color = opt(fd.get("color"));
+  const slug = name!.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "objekt";
+  const supabase = await createClient();
+  const { data: last } = await supabase.from("furniture_types").select("sort_order").neq("shape", "fixed").order("sort_order", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await supabase.from("furniture_types").insert({
+    id: `${slug}-${Math.random().toString(36).slice(2, 6)}`,
+    name,
+    shape,
+    width_m: w,
+    depth_m: d,
+    default_chairs: chairs,
+    max_chairs: max,
+    stock: shape === "fixed" || num("stock") == null ? null : Math.round(num("stock")!),
+    supplier: shape === "fixed" ? null : opt(fd.get("supplier")),
+    color: color && /^#[0-9a-f]{6}$/i.test(color) && color.toLowerCase() !== "#ffffff" ? color : null,
+    sort_order: shape === "fixed" ? 200 : (last?.sort_order ?? 0) + 1,
+    active: true,
+  });
+  if (error) fail(path, `Kunde inte lägga till: ${error.message}`);
+  revalidatePath("/mobleringar", "layout");
+  redirect(`${path}?skapad=1`);
+}

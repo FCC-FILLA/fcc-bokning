@@ -1,15 +1,13 @@
 import { LayoutDrawing } from "@/components/layout-drawing";
-import { closedWalls, countItems, focusView, type FurnitureType, type LayoutItem, type RoomPlan } from "@/lib/moblering";
+import { LayoutLegend, type LegendType } from "@/components/layout-legend";
+import { closedWalls, focusView, type LayoutItem, type RoomPlan } from "@/lib/moblering";
 
 /** Ritningen med ställ-lista och instruktioner. Används för utskrift och på personalens pass. */
 export function LayoutSheet({
   plan, items, types, notes, compact = false, walls,
-}: { walls?: string[] | null; plan: RoomPlan; items: LayoutItem[]; types: Pick<FurnitureType, "id" | "name" | "color" | "sort_order">[]; notes?: string | null; compact?: boolean }) {
-  const { per, chairs } = countItems(items);
-  const byId = new Map(types.map((t) => [t.id, t]));
-  const rows = [...per].sort((a, b) => (byId.get(a[0])?.sort_order ?? 99) - (byId.get(b[0])?.sort_order ?? 99));
+}: { walls?: string[] | null; plan: RoomPlan; items: LayoutItem[]; types: LegendType[]; notes?: string | null; compact?: boolean }) {
   return (
-    <div className={compact ? "grid gap-3" : "grid gap-4 md:grid-cols-[minmax(0,1fr)_240px] print:grid-cols-[minmax(0,1fr)_200px] items-start"}>
+    <div className={compact ? "grid gap-3" : "grid gap-4 md:grid-cols-[minmax(0,1fr)_260px] print:grid-cols-[minmax(0,1fr)_62mm] items-start"}>
       <div className="rounded-lg border border-line overflow-hidden">
         <LayoutDrawing
           plan={plan}
@@ -23,15 +21,8 @@ export function LayoutSheet({
       </div>
       <div className="grid gap-3 text-sm">
         <div>
-          <p className="font-semibold">Ställ-lista</p>
-          <table className="w-full">
-            <tbody>
-              {rows.map(([t, n]) => (
-                <tr key={t} className="border-b border-line/60"><td className="py-0.5">{byId.get(t)?.name ?? t}</td><td className="text-right tabular-nums font-semibold">{n}</td></tr>
-              ))}
-              <tr><td className="py-0.5 font-semibold">Stolar</td><td className="text-right tabular-nums font-semibold">{chairs}</td></tr>
-            </tbody>
-          </table>
+          <p className="font-semibold">Ställ-lista och teckenförklaring</p>
+          <LayoutLegend items={items} types={types} compact={compact} />
         </div>
         {notes?.trim() && (
           <div>

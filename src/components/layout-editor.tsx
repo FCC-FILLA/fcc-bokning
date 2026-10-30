@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import Link from "next/link";
 import { LayoutDrawing } from "@/components/layout-drawing";
+import { LayoutLegend } from "@/components/layout-legend";
 import {
-  GEN_LABEL, closedWalls, countItems, focusView, generate, newItem, uid,
-  type FurnitureType, type GenKind, type LayoutItem, type RoomPlan,
+  DEFAULT_TABLE_GAP, GEN_LABEL, closedWalls, countItems, focusView, generate, newItem, nextTo, snapToObjects, uid,
+  type FurnitureType, type GenKind, type Guide, type LayoutItem, type RoomPlan,
 } from "@/lib/moblering";
 
 type Drag =
-  | { kind: "move"; start: { x: number; y: number }; orig: Map<string, { x: number; y: number }>; moved: boolean }
+  | { kind: "move"; start: { x: number; y: number }; orig: Map<string, { x: number; y: number }>; moved: boolean; anchor: string }
   | { kind: "box"; start: { x: number; y: number }; add: boolean; base: Set<string> };
 
 type Props = {
@@ -39,6 +41,20 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
   const toggleWall = (id: string) => setShut((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [snap, setSnap] = useState(0.1);
+  // Fäst mot andra objekt, och avståndet mellan borden (kant till kant). Sparas i webbläsaren.
+  const [objSnap, setObjSnap] = useState(true);
+  const [gap, setGap] = useState(DEFAULT_TABLE_GAP);
+  const [guides, setGuides] = useState<Guide[]>([]);
+  useEffect(() => {
+    try {
+      const g = Number(localStorage.getItem("fcc-bordsavstand"));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (g >= 0.3 && g <= 5) setGap(g);
+      if (localStorage.getItem("fcc-fast-objekt") === "0") setObjSnap(false);
+    } catch { /* ingen lagring */ }
+  }, []);
+  const saveGap = (g: number) => { setGap(g); try { localStorage.setItem("fcc-bordsavstand", String(g)); } catch { /* */ } };
+  const saveObjSnap = (v: boolean) => { setObjSnap(v); try { localStorage.setItem("fcc-fast-objekt", v ? "1" : "0"); } catch { /* */ } };
   // Hela våningsplanet är ritat; börja inzoomat på lokalens golvyta (eller det som redan är möblerat).
   const startView = useMemo(() => focusView(initialPlan, initial, 3), [initialPlan, initial]);
   const [zoom, setZoom] = useState(() => Math.min(6, Math.max(1, Math.round(((initialPlan.width + 2.4) / startView.w) * 2) / 2)));
@@ -116,7 +132,10 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
 
   const add = (t: FurnitureType) => {
     const n = items.length % 6;
-    const it = newItem(t, r2(plan.width / 2 + (n - 3) * 0.6), r2(Math.min(plan.depth - 1, 2 + n * 0.6)));
+    // Nästa bord hamnar bredvid det förra av samma sort, med valt avstånd.
+    const last = [...items].reverse().find((i) => i.t === t.id);
+    const pos = last ? nextTo(last, t, gap, plan) : null;
+    const it = pos ? { ...newItem(t, pos.x, pos.y), r: last!.r } : newItem(t, r2(plan.width / 2 + (n - 3) * 0.6), r2(Math.min(plan.depth - 1, 2 + n * 0.6)));
     commit((prev) => [...prev, it]);
     setSelected(new Set([it.id]));
   };
@@ -133,7 +152,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
     }
     if (!sel.has(id)) { sel = new Set([id]); setSelected(sel); }
     const orig = new Map(items.filter((i) => sel.has(i.id)).map((i) => [i.id, { x: i.x, y: i.y }]));
-    drag.current = { kind: "move", start: toMeters(e), orig, moved: false };
+    drag.current = { kind: "move", start: toMeters(e), orig, moved: false, anchor: id };
     svgRef.current?.setPointerCapture(e.pointerId);
   };
 
@@ -154,9 +173,26 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
       const dy = p.y - d.start.y;
       if (!d.moved && Math.hypot(dx, dy) < 0.05) return;
       if (!d.moved) { past.current.push(items); future.current = []; d.moved = true; }
+      // Fäst mot andra objekt (håll Alt för att flytta fritt). Fäster en axel gäller det för hela markeringen.
+      let fx: number | null = null;
+      let fy: number | null = null;
+      const a0 = d.orig.get(d.anchor);
+      const anchor = items.find((i) => i.id === d.anchor);
+      if (objSnap && !e.altKey && a0 && anchor) {
+        const others = [...items.filter((i) => !d.orig.has(i.id)), ...plan.items];
+        const res = snapToObjects({ ...anchor, x: a0.x + dx, y: a0.y + dy }, others, gap, Math.max(0.08, 0.2 / zoom));
+        fx = res.dx;
+        fy = res.dy;
+        setGuides(res.guides);
+      } else setGuides([]);
       setItems((prev) => prev.map((i) => {
         const o = d.orig.get(i.id);
-        return o ? { ...i, x: r2(snapTo(o.x + dx)), y: r2(snapTo(o.y + dy)) } : i;
+        if (!o) return i;
+        return {
+          ...i,
+          x: r2(fx != null ? o.x + dx + fx : snapTo(o.x + dx)),
+          y: r2(fy != null ? o.y + dy + fy : snapTo(o.y + dy)),
+        };
       }));
     } else {
       const box = { x: Math.min(d.start.x, p.x), y: Math.min(d.start.y, p.y), w: Math.abs(p.x - d.start.x), h: Math.abs(p.y - d.start.y) };
@@ -165,7 +201,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
       setSelected(new Set([...d.base, ...inside]));
     }
   };
-  const onUp = () => { drag.current = null; setMarquee(null); };
+  const onUp = () => { drag.current = null; setMarquee(null); setGuides([]); };
 
   const selItems = items.filter((i) => selected.has(i.id));
   const update = (patch: Partial<LayoutItem>) => commit((prev) => prev.map((i) => (selected.has(i.id) ? { ...i, ...patch } : i)));
@@ -221,7 +257,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
     types.filter((t) => t.active && (k === "bankett" ? t.shape === "round" && t.default_chairs > 0 : k === "mingel" ? t.shape === "round" : k === "teater" ? false : t.shape === "rect" && t.default_chairs > 0));
   const runGen = () => {
     const res = generate({ ...plan, items: initialPlan.items }, types, {
-      ...gen, table: gen.table || undefined, perTable: gen.perTable || undefined,
+      ...gen, table: gen.table || undefined, perTable: gen.perTable || undefined, gap,
     });
     commit(res.items);
     setSelected(new Set());
@@ -229,7 +265,7 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
   };
 
   // ---------- Ställ-lista ----------
-  const { per, chairs } = countItems(items);
+  const { chairs } = countItems(items);
   const cap = setupId ? capacities[setupId] : undefined;
   const floor = kvm ?? plan.width * plan.depth;
   const one = selItems.length === 1 ? selItems[0] : null;
@@ -259,6 +295,9 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
             </button>
           ))}
         </div>
+        {!roomMode && !readOnly && (
+          <Link href="/installningar/moblering#nytt" className="text-xs text-muted hover:underline">+ Nytt objekt (t.ex. inhyrt bord)</Link>
+        )}
         {roomMode && (
           <div className="grid grid-cols-2 gap-2 border-t border-line pt-2">
             <input type="hidden" name="area" value={area ? JSON.stringify(area) : ""} />
@@ -306,6 +345,17 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
               <option value={0}>fritt</option><option value={0.1}>10 cm</option><option value={0.25}>25 cm</option><option value={0.5}>50 cm</option><option value={1}>1 m</option>
             </select>
           </label>
+          <label className="flex items-center gap-1.5 text-sm" title="Objekt fäster mot andra objekts kanter och mittlinjer, och bord mot valt avstånd. Håll Alt för att flytta fritt.">
+            <input type="checkbox" checked={objSnap} onChange={(e) => saveObjSnap(e.target.checked)} /> mot objekt
+          </label>
+          {!roomMode && (
+            <label className="flex items-center gap-1.5 text-sm" title="Avstånd mellan borden, kant till kant. Används när bord fäster mot varandra, när du lägger till bord och av Fyll automatiskt.">
+              Bordsavstånd
+              <input className="input h-8 py-0 text-sm w-16" type="number" min={30} max={500} step={5} value={Math.round(gap * 100)}
+                onChange={(e) => { const v = Number(e.target.value); if (v >= 30 && v <= 500) saveGap(v / 100); }} aria-label="Bordsavstånd i cm" />
+              <span className="text-muted">cm</span>
+            </label>
+          )}
           {(initialPlan.walls ?? []).length > 0 && (
             <span className="flex flex-wrap items-center gap-1 text-sm">
               <span className="text-muted">{roomMode ? "Vikväggar stängda som standard:" : "Vikväggar:"}</span>
@@ -341,10 +391,11 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
             widthPct={zoom * 100}
             closed={shut}
             showArea={roomMode || items.length === 0}
+            guides={guides}
           />
         </div>
         <p className="text-xs text-muted print:hidden">
-          Dra en ruta på golvet för att markera flera. Shift-klick lägger till. Piltangenter flyttar 10 cm (med Shift 1 m), R vrider 15°, Ctrl+D kopierar, Delete tar bort.
+          Dra en ruta på golvet för att markera flera. Shift-klick lägger till. Objekt fäster mot varandra (röda linjer), håll Alt för att flytta fritt. Piltangenter flyttar 10 cm (med Shift 1 m), R vrider 15°, Ctrl+D kopierar, Delete tar bort.
         </p>
       </div>
 
@@ -444,24 +495,8 @@ export function LayoutEditor({ mode, plan: initialPlan, initial, types, action, 
 
         {!roomMode && (
           <section className="card p-3 grid gap-2">
-            <h2 className="font-semibold text-sm">Ställ-lista</h2>
-            <ul className="grid gap-0.5 text-sm">
-              {[...per].sort((a, b) => (byId.get(a[0])?.sort_order ?? 99) - (byId.get(b[0])?.sort_order ?? 99)).map(([t, n]) => {
-                const stock = byId.get(t)?.stock;
-                return (
-                  <li key={t} className="flex gap-2">
-                    <span className="flex-1">{names[t] ?? t}</span>
-                    <span className={`tabular-nums font-semibold ${stock != null && n > stock ? "text-warn" : ""}`}>{n}</span>
-                    {stock != null && <span className={`text-xs tabular-nums w-14 text-right ${n > stock ? "text-warn" : "text-muted"}`}>av {stock}</span>}
-                  </li>
-                );
-              })}
-              <li className="flex gap-2 border-t border-line pt-1 mt-1">
-                <span className="flex-1">Stolar</span>
-                <span className={`tabular-nums font-semibold ${byId.get("stol")?.stock != null && chairs > byId.get("stol")!.stock! ? "text-warn" : ""}`}>{chairs}</span>
-                {byId.get("stol")?.stock != null && <span className="text-xs tabular-nums w-14 text-right text-muted">av {byId.get("stol")!.stock}</span>}
-              </li>
-            </ul>
+            <h2 className="font-semibold text-sm">Ställ-lista och teckenförklaring</h2>
+            {items.length ? <LayoutLegend items={items} types={types} showStock /> : <p className="text-sm text-muted">Inget ritat än.</p>}
             <div className="grid gap-0.5 text-xs text-muted">
               {guests ? <p className={chairs < guests ? "text-warn" : ""}>Evenemanget har {guests} gäster{chairs < guests ? ` – ${guests - chairs} platser saknas` : ""}.</p> : null}
               {cap ? <p className={chairs > cap ? "text-warn font-semibold" : ""}>Lokalens kapacitet för möbleringen: {cap}{chairs > cap ? " – ritningen har fler platser!" : ""}.</p> : null}

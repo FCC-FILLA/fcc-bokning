@@ -890,6 +890,17 @@ describe("möbleringsritningar", () => {
       expect(r.rows.length).toBeGreaterThan(10);
     });
   });
+
+  it("räknar upp versionen när ritningen ändras, inte när den bara kopplas", async () => {
+    const birka = await roomId("Birka");
+    const l = (await db.query<{ id: string; version: number }>("insert into layouts (name, room_id) values ('Version', $1) returning id, version", [birka])).rows[0];
+    expect(l.version).toBe(1);
+    await db.query(`update layouts set items = '[{"t":"stol"}]' where id = $1`, [l.id]);
+    await db.query("update layouts set staff_visible = not staff_visible where id = $1", [l.id]);
+    await db.query("update layouts set notes = 'Vita dukar' where id = $1", [l.id]);
+    const v = await db.query<{ version: number }>("select version from layouts where id = $1", [l.id]);
+    expect(v.rows[0].version).toBe(3);
+  });
 });
 
 describe("omställning och rigg/riv", () => {
