@@ -13,8 +13,8 @@
 
   position: fixed; inset: 0;
   display: grid; grid-template-rows: auto 1fr auto; gap: 1.1em;
-  /* Marginal mot TV:ns överskanning (kanterna som TV:n skär bort): 3 % runt om. */
-  padding: 3vh max(3vw, env(safe-area-inset-right, 0px)) 3vh max(3vw, env(safe-area-inset-left, 0px));
+  /* Marginal mot TV:ns överskanning (kanterna som TV:n skär bort): 1 % på sidorna, 2 % upptill och nedtill. */
+  padding: 2vh max(1vw, env(safe-area-inset-right, 0px)) 2vh max(1vw, env(safe-area-inset-left, 0px));
   background: var(--s-bg); color: var(--s-fg);
   font-family: var(--font-sans); font-size: clamp(14px, 1.05vw, 24px); line-height: 1.35;
   color-scheme: dark; overflow: hidden;
