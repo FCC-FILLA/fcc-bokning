@@ -19,11 +19,12 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
   const { data } = await q;
   const mails = (data ?? []) as Mail[];
   const [{ data: st }, { count: sentCount }, { count: failCount }] = await Promise.all([
-    supabase.from("app_settings").select("key, value").in("key", ["mail_from", "mail_reply_to", "invoice_email_to", "payroll_email"]),
+    supabase.from("app_settings").select("key, value").in("key", ["mail_from", "mail_reply_to", "invoice_email_to", "payroll_email", "mail_test_to"]),
     supabase.from("email_outbox").select("id", { count: "exact", head: true }).eq("status", "skickad").not("sent_at", "is", null),
     supabase.from("email_outbox").select("id", { count: "exact", head: true }).eq("status", "fel"),
   ]);
   const cfg = new Map(((st ?? []) as { key: string; value: string }[]).map((x) => [x.key, x.value]));
+  const testTo = (cfg.get("mail_test_to") ?? "").trim();
 
   return (
     <div className="grid gap-5 max-w-4xl">
@@ -34,6 +35,7 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
           kopplad. Tills dess kan du skicka dem från ditt eget e-postprogram med en knapptryckning.
         </p>
       </div>
+      {testTo && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn"><b>Testläge är på.</b> Alla mejl går till {testTo}, inte till mottagarna.</p>}
       {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Sparat.</p>}
       {sp.test && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Testmejlet ligger i kön. Har det inte kommit inom en minut är e-posten inte kopplad än.</p>}
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
@@ -59,6 +61,16 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
             <label className="label" htmlFor="payroll_email">Tidsunderlag (lön) skickas till</label>
             <input className="input" id="payroll_email" name="payroll_email" type="email" defaultValue={cfg.get("payroll_email") ?? ""} disabled={!admin} placeholder="lon@…" />
           </div>
+          <fieldset className={`sm:col-span-2 grid gap-2 rounded-lg border p-3 ${testTo ? "border-warn bg-warn-soft" : "border-line"}`}>
+            <label className="flex items-center gap-2 font-semibold">
+              <input type="checkbox" name="test_mode" defaultChecked={!!testTo} disabled={!admin} /> Testläge – inga mejl går till kunder eller personal
+            </label>
+            <p className="text-xs text-muted">När testläget är på skickas alla mejl från appen till adressen nedan i stället, märkta med vem de skulle ha gått till.</p>
+            <div className="field max-w-sm">
+              <label className="label" htmlFor="mail_test_to">Skicka alla mejl till</label>
+              <input className="input" id="mail_test_to" name="mail_test_to" type="email" defaultValue={testTo || profile.email || ""} disabled={!admin} />
+            </div>
+          </fieldset>
           {admin && <div><button className="btn" type="submit">Spara</button></div>}
         </form>
         <form action={sendTestMail}>
@@ -90,7 +102,7 @@ export default async function MailPage({ searchParams }: { searchParams: Promise
                 </details>
                 {manager && m.status === "koad" && (
                   <div className="flex flex-wrap gap-2">
-                    <a className="btn btn-primary text-sm" href={`mailto:${m.to_email}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(body)}`}>Öppna i e-post</a>
+                    <a className="btn btn-primary text-sm" href={`mailto:${testTo || m.to_email}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(body)}`}>Öppna i e-post</a>
                     <form action={setMailStatus.bind(null, m.id, "skickad")}><button className="btn text-sm" type="submit">Markera som skickat</button></form>
                     <form action={setMailStatus.bind(null, m.id, "struken")}><button className="btn btn-ghost text-sm" type="submit">Stryk</button></form>
                   </div>
