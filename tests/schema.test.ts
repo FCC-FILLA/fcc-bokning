@@ -1065,3 +1065,19 @@ describe("öppna och stänga huset", () => {
     }
   });
 });
+
+describe("statistik", () => {
+  it("räknar beläggning per lokal och månad samt vunna offerter per kategori", async () => {
+    const ev = await book("Statistik-test", "bekraftad", "Birka", "2031-06-10T09:00+02", "2031-06-11T17:00+02");
+    const co = (await db.query<{ id: string }>("insert into companies (name, categories) values ('Stat AB', '{Eventbyrå}') returning id")).rows[0].id;
+    const q = (await db.query<{ id: string }>("insert into quotes (title, status, company_id, event_id, accepted_at, sent_at) values ('S', 'accepterad', $1, $2, '2031-03-05', '2031-03-01') returning id", [co, ev])).rows[0].id;
+    await db.query("insert into quote_lines (quote_id, description, quantity, unit_price, group_id) values ($1, 'Lokal', 1, 10000, (select id from article_groups limit 1))", [q]);
+    const s = await asUser(ADMIN, () => db.query<{ d: { occupancy: { room: string; months: { m: number; days: number; hours: number }[] }[]; quotes: { m: number; won_value: number }[]; by_category: { category: string; value: number }[] } }>("select stats_year(2031) as d"));
+    const d = s.rows[0].d;
+    const birka = d.occupancy.find((x) => x.room === "Birka")!;
+    expect(birka.months[5]).toMatchObject({ m: 6, days: 2 });
+    expect(Number(birka.months[5].hours)).toBe(32);
+    expect(Number(d.quotes[2].won_value)).toBe(10000);
+    expect(d.by_category).toEqual([{ category: "Eventbyrå", count: 1, value: 10000 }]);
+  });
+});

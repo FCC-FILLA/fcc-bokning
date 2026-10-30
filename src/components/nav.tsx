@@ -62,6 +62,7 @@ const SECTIONS: Section[] = [
       { href: "/offerter", label: "Offerter" },
       { href: "/fakturor", label: "Fakturaunderlag" },
       { href: "/kunder", label: "Kunder" },
+      { href: "/statistik", label: "Statistik" },
     ],
   },
 ];
