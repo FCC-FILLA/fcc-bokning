@@ -15,6 +15,7 @@ const SECTIONS: Section[] = [
       { href: "/", label: "Översikt" },
       { href: "/uppgifter", label: "Mina uppgifter" },
       { href: "/notiser", label: "Notiser" },
+      { href: "/lokaler/fel", label: "Felanmälningar" },
     ],
   },
   {
@@ -37,6 +38,7 @@ const SECTIONS: Section[] = [
       { href: "/evenemang", label: "Alla evenemang" },
       { href: "/mallar", label: "Mallar" },
       { href: "/mobleringar", label: "Möbleringar" },
+      { href: "/mobleringar/lager", label: "Möbler per dag" },
     ],
   },
   {
@@ -49,6 +51,7 @@ const SECTIONS: Section[] = [
       { href: "/personal/personer", label: "Personer" },
       { href: "/personal/funktioner", label: "Funktioner" },
       { href: "/personal/info", label: "Info till personalen" },
+      { href: "/personal/rutiner", label: "Öppna och stänga" },
     ],
   },
   {
@@ -59,6 +62,7 @@ const SECTIONS: Section[] = [
       { href: "/offerter", label: "Offerter" },
       { href: "/fakturor", label: "Fakturaunderlag" },
       { href: "/kunder", label: "Kunder" },
+      { href: "/statistik", label: "Statistik" },
     ],
   },
 ];
@@ -72,6 +76,7 @@ const SETTINGS: Section = {
     { href: "/lokaler", label: "Lokaler" },
     { href: "/prislista", label: "Prislista" },
     { href: "/installningar/moblering", label: "Möbler och inventarier" },
+    { href: "/installningar/omstallning", label: "Omställning" },
     { href: "/installningar/evenemangstyper", label: "Evenemangstyper" },
     { href: "/installningar/bilder", label: "Bilder" },
     { href: "/installningar/offert", label: "Offert" },

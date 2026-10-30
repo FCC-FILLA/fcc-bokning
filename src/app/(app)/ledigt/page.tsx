@@ -42,7 +42,9 @@ export default async function FreeRoomsPage({
           .gt("ends_at", startIso)
       : Promise.resolve({ data: [] }),
   ]);
-  const rooms = (r ?? []) as Room[];
+  // Spärrade lokaler (t.ex. vid ett fel) föreslås inte.
+  const blockedRooms = ((r ?? []) as (Room & { blocked?: boolean })[]).filter((x) => x.blocked);
+  const rooms = ((r ?? []) as (Room & { blocked?: boolean })[]).filter((x) => !x.blocked) as Room[];
   const caps = (c ?? []) as RoomCapacity[];
   const setups = (s ?? []) as Setup[];
   const hits = (b ?? []) as unknown as Hit[];
@@ -80,6 +82,7 @@ export default async function FreeRoomsPage({
       <div className="grid gap-1">
         <h1 className="text-2xl font-semibold">Hitta ledig lokal</h1>
         <p className="text-sm text-muted">Visar salar som är lediga hela tiden och rymmer gästerna. Delar av en bokad sal räknas som upptagna, och tvärtom.</p>
+        {blockedRooms.length > 0 && <p className="text-sm text-warn">Spärrade och inte med: {blockedRooms.map((x) => x.name).join(", ")}.</p>}
       </div>
 
       <form method="get" className="card p-4 flex flex-wrap items-end gap-3">

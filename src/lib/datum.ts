@@ -109,3 +109,11 @@ export function fmtRange(startIso: string, endIso: string): string {
   }
   return `${fmtDate(sd)} ${fmtTime(startIso)} – ${fmtDate(ed)} ${fmtTime(endIso)}`;
 }
+
+/** Minuter som läsbar tid: 45 min, 1 h, 1 h 30 min. */
+export function fmtMinutes(min: number): string {
+  const m = Math.round(Math.abs(min));
+  const h = Math.floor(m / 60), r = m % 60;
+  const s = h && r ? `${h} h ${r} min` : h ? `${h} h` : `${r} min`;
+  return min < 0 ? `−${s}` : s;
+}

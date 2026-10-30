@@ -153,3 +153,25 @@ export async function changeRoomImage(id: string, image: string, action: "main" 
   if (action === "remove") await removeUploaded(supabase, BUCKET, image);
   redirect(`${path}#bilder`);
 }
+
+/** Lokalkortet: praktisk info, kontakt och spärr. */
+export async function saveRoomCard(id: string, fd: FormData) {
+  if (!isAdmin(await requireProfile())) redirect(`/lokaler/${id}?fel=${encodeURIComponent("Bara administratörer kan ändra lokalkortet.")}#lokalkort`);
+  const t = (k: string) => String(fd.get(k) ?? "").trim().slice(0, 3000) || null;
+  const supabase = await createClient();
+  await supabase.from("rooms").update({
+    card_info: t("card_info"), safety_info: t("safety_info"), contact_info: t("contact_info"),
+    blocked: fd.get("blocked") === "on", blocked_reason: t("blocked_reason"),
+  }).eq("id", id);
+  revalidatePath("/", "layout");
+  redirect(`/lokaler/${id}?sparad=1#lokalkort`);
+}
+
+/** Ny QR-kod (den gamla slutar fungera), t.ex. om skylten kommit på avvägar. */
+export async function newRoomCardToken(id: string) {
+  if (!isAdmin(await requireProfile())) redirect(`/lokaler/${id}#lokalkort`);
+  const supabase = await createClient();
+  await supabase.from("rooms").update({ card_token: crypto.randomUUID() }).eq("id", id);
+  revalidatePath(`/lokaler/${id}`);
+  redirect(`/lokaler/${id}#lokalkort`);
+}

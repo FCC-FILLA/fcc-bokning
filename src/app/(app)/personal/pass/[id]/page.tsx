@@ -54,6 +54,17 @@ export default async function ShiftPage({
     .filter((x): x is Pick<Staff, "id" | "name" | "kind" | "active"> => !!x && x.active && x.kind === shift.staff_kind && !taken.has(x.id))
     .sort((p, q) => p.name.localeCompare(q.name, "sv"));
   const full = assigned.length >= shift.needed;
+  // Vilka som är upptagna under passet (markerat ledigt eller jobbar annat pass).
+  const busyIds = [...new Set([...candidates.map((c) => c.id), ...assigned.map((x) => x.staff_id)])];
+  const busyList = await Promise.all(
+    busyIds.map(async (sid) => {
+      const { data } = await supabase.rpc("staff_busy_reason", { p_staff: sid, p_from: shift.starts_at, p_to: shift.ends_at, p_except_shift: id });
+      return [sid, (data as string | null) ?? null] as const;
+    }),
+  );
+  const busy = new Map(busyList.filter(([, why]) => !!why) as [string, string][]);
+  const optLabel = (c: { id: string; name: string }) => (busy.has(c.id) ? `${c.name} – ${busy.get(c.id)}` : c.name);
+  const freeFirst = [...candidates].sort((a, b) => Number(busy.has(a.id)) - Number(busy.has(b.id)));
 
   return (
     <div className="grid gap-5 max-w-5xl">
@@ -91,6 +102,7 @@ export default async function ShiftPage({
                 <li key={x.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
                   <Link href={`/personal/personer/${x.staff_id}`} className="font-medium hover:underline">{x.staff?.name}</Link>
                   <span className="text-xs text-muted">sökte {fmtDate(x.applied_at)}</span>
+                  {busy.has(x.staff_id) && <span className="text-xs text-warn">{busy.get(x.staff_id)}</span>}
                   {manager && (
                     <span className="ml-auto flex gap-2">
                       <form action={decide.bind(null, id, x.staff_id, "tilldelad")}><button className="btn btn-primary text-sm" type="submit" disabled={full}>Ge passet</button></form>
@@ -130,7 +142,7 @@ export default async function ShiftPage({
               <label className="label" htmlFor="staff_id">Lägg till direkt</label>
               <select className="input" id="staff_id" name="staff_id" defaultValue="">
                 <option value="" disabled>{candidates.length ? "Välj person" : `Ingen ${KIND_LABEL[shift.staff_kind].toLowerCase()} med funktionen ${fn?.name}`}</option>
-                {candidates.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {freeFirst.map((c) => <option key={c.id} value={c.id}>{optLabel(c)}</option>)}
               </select>
             </div>
             <button className="btn" type="submit" disabled={!candidates.length}>Lägg till</button>
@@ -169,6 +181,7 @@ export default async function ShiftPage({
                       {ASSIGNMENT_LABEL[x.status]}
                       {x.status === "inbjuden" && x.respond_by ? ` · svar senast ${fmtDate(x.respond_by)} ${fmtTime(x.respond_by)}` : ""}
                     </span>
+                    {busy.has(x.staff_id) && x.status === "vantar" && <span className="text-xs text-warn">{busy.get(x.staff_id)}, hoppas över</span>}
                     {manager && (
                       <span className="ml-auto flex flex-wrap items-center gap-1">
                         {x.status === "inbjuden" && (
@@ -204,7 +217,7 @@ export default async function ShiftPage({
                   <label className="label" htmlFor="queue-staff">Lägg till i kön</label>
                   <select className="input" id="queue-staff" name="staff_id" defaultValue="">
                     <option value="" disabled>{candidates.length ? "Välj frilansare" : `Ingen frilansare med funktionen ${fn?.name}`}</option>
-                    {candidates.filter((c) => !queue.some((q) => q.staff_id === c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {freeFirst.filter((c) => !queue.some((q) => q.staff_id === c.id)).map((c) => <option key={c.id} value={c.id}>{optLabel(c)}</option>)}
                   </select>
                 </div>
                 <button className="btn" type="submit">Lägg till</button>

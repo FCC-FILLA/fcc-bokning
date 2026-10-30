@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireBooker } from "@/lib/auth";
-import { daysBetween, expandRows, parseRows, shiftIso } from "@/lib/bokning";
+import { daysBetween, expandRows, minutes, parseRows, shiftIso } from "@/lib/bokning";
 import { addDays, isoToDate, localToIso } from "@/lib/datum";
 import { isPhase, retime, shiftMinutes } from "@/lib/serier";
 import { createClient } from "@/lib/supabase/server";
+import { kickMail } from "@/lib/epost";
 import { STATUSES } from "@/lib/types";
 
 const opt = (v: FormDataEntryValue | null) => {
@@ -159,6 +160,7 @@ export async function updateBooking(eventId: string, bookingId: string, fd: Form
     .update({
       room_id, starts_at, ends_at, setup_id: opt(fd.get("setup_id")), note: opt(fd.get("note")),
       ...(isPhase(fd.get("phase")) ? { phase: fd.get("phase") as string } : {}),
+      rig_minutes: minutes(fd.get("rig_minutes")), strike_minutes: minutes(fd.get("strike_minutes")),
     })
     .eq("id", bookingId)
     .eq("event_id", eventId);
@@ -174,7 +176,7 @@ export async function copyDay(eventId: string, fromDate: string, fd: FormData) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("bookings")
-    .select("room_id, starts_at, ends_at, setup_id, note, phase")
+    .select("room_id, starts_at, ends_at, setup_id, note, phase, rig_minutes, strike_minutes")
     .eq("event_id", eventId)
     .gte("starts_at", localToIso(`${fromDate}T00:00`))
     .lt("starts_at", localToIso(`${addDays(fromDate, 1)}T00:00`));
@@ -199,7 +201,7 @@ export async function duplicateEvent(eventId: string, fd: FormData) {
   const supabase = await createClient();
   const [{ data: ev }, { data: bookings }] = await Promise.all([
     supabase.from("events").select("*").eq("id", eventId).single(),
-    supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note, phase").eq("event_id", eventId).order("starts_at"),
+    supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note, phase, rig_minutes, strike_minutes").eq("event_id", eventId).order("starts_at"),
   ]);
   if (!ev) redirect("/evenemang");
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -338,4 +340,14 @@ export async function bulkEditBookings(eventId: string, fd: FormData) {
   }
   revalidatePath("/", "layout");
   back(eventId, failed ? err(`${failed} av ${rows.length} bokningar kunde inte ändras.`) + "&vy=serier" : `andrat=${rows.length}&vy=serier`);
+}
+
+/** Skickar optionsmejlet till kundens kontakt nu (annars går det automatiskt några dagar före). */
+export async function sendOptionReminder(eventId: string) {
+  await requireBooker();
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("send_option_reminder", { p_event: eventId });
+  await kickMail();
+  revalidatePath(`/evenemang/${eventId}`);
+  redirect(`/evenemang/${eventId}?${data ? "optionskickad=1" : err("Det gick inte. Evenemanget behöver vara preliminärt, ha ett optionsdatum och en kontakt med e-post.")}`);
 }

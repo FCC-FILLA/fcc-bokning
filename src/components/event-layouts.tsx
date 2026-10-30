@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { canManageStaff, getProfile } from "@/lib/auth";
-import { fmtDate, fmtTime } from "@/lib/datum";
+import { fmtDate, fmtTime, isoToDate } from "@/lib/datum";
 import { closedWalls, countItems, focusView, parseItems, planFor } from "@/lib/moblering";
 import { loadFurniture } from "@/lib/moblering-server";
 import { createClient } from "@/lib/supabase/server";
@@ -30,6 +30,12 @@ export async function EventLayouts({ eventId }: { eventId: string }) {
   const colors = Object.fromEntries(types.map((x) => [x.id, x.color]));
   const bookedRooms = new Set(bookings.map((x) => x.room_id));
   const relevant = templates.filter((x) => bookedRooms.has(x.room_id));
+  // Dagar då evenemangets ritningar tillsammans med andra evenemangs kräver fler möbler än lagret.
+  const firstDay = bookings[0] ? isoToDate(bookings[0].starts_at) : null;
+  const lastDay = bookings.length ? isoToDate(bookings.at(-1)!.ends_at) : null;
+  const { data: fd } = layouts.length && firstDay && lastDay ? await supabase.rpc("furniture_by_day", { p_from: firstDay, p_to: lastDay }) : { data: [] };
+  const shortages = ((fd ?? []) as { day: string; name: string; needed: number; stock: number | null; events: { event_id: string; title: string; n: number }[] }[])
+    .filter((x) => x.stock != null && x.needed > x.stock && x.events.some((e) => e.event_id === eventId));
 
   return (
     <section id="moblering" className="card p-5 grid gap-4 scroll-mt-28">
@@ -37,6 +43,17 @@ export async function EventLayouts({ eventId }: { eventId: string }) {
         <h2 className="text-lg font-semibold">Möblering</h2>
         <span className="text-sm text-muted">Ritningar och ställ-listor. De som är markerade för personal syns på deras pass.</span>
       </div>
+      {shortages.length > 0 && (
+        <ul className="rounded-lg bg-warn-soft px-4 py-2 text-sm text-warn grid gap-0.5">
+          {shortages.map((x) => (
+            <li key={x.day + x.name}>
+              {fmtDate(x.day)}: {x.name} räcker inte, {x.needed} behövs och ni har {x.stock}
+              {x.events.length > 1 ? ` (även ${x.events.filter((e) => e.event_id !== eventId).map((e) => `${e.title} ${e.n}`).join(", ")})` : ""}.{" "}
+              <Link className="underline" href="/mobleringar/lager">Möbler per dag</Link>
+            </li>
+          ))}
+        </ul>
+      )}
       {layouts.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {layouts.map((x) => {

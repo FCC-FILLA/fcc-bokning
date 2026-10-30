@@ -891,3 +891,264 @@ describe("möbleringsritningar", () => {
     });
   });
 });
+
+describe("omställning och rigg/riv", () => {
+  it("varnar när tiden mellan två bokningar i samma lokal är kortare än riv + omställning + rigg", async () => {
+    const a = await book("Omst A", "bekraftad", "Birka", "2028-02-01T09:00+01", "2028-02-01T12:00+01");
+    const b = await book("Omst B", "preliminar", "Birka", "2028-02-01T13:00+01", "2028-02-01T17:00+01");
+    await db.query("update bookings set setup_id = 'bio' where event_id = $1", [a]);
+    await db.query("update bookings set setup_id = 'runda' where event_id = $1", [b]);
+    const w = async () =>
+      (await db.query<{ gap_minutes: number; needed_minutes: number; event_title: string }>(
+        "select gap_minutes, needed_minutes, event_title from changeover_warnings where event_id = $1", [a])).rows;
+    // bio -> runda: 120 min, bara 60 min emellan.
+    expect(await w()).toEqual([{ gap_minutes: 60, needed_minutes: 120, event_title: "Omst A" }]);
+    // Eget par 45 min räcker.
+    await db.query("insert into setup_changeovers (from_setup, to_setup, minutes) values ('bio', 'runda', 45)");
+    expect(await w()).toEqual([]);
+    // Rigg på nästa bokning gör det för kort igen.
+    await db.query("update bookings set rig_minutes = 30 where event_id = $1", [b]);
+    expect((await w())[0].needed_minutes).toBe(75);
+    // Samma möblering och ingen rigg: ingen varning.
+    await db.query("update bookings set rig_minutes = 0, setup_id = 'bio' where event_id = $1", [b]);
+    expect(await w()).toEqual([]);
+  });
+});
+
+describe("möbler per dag", () => {
+  it("summerar ritningarna samma dag över evenemang och tar högsta antalet inom ett evenemang", async () => {
+    await db.query("update furniture_types set stock = 25 where id = 'stol'");
+    const a = await book("Lager A", "bekraftad", "Birka", "2028-03-01T09:00+01", "2028-03-01T17:00+01");
+    const b = await book("Lager B", "preliminar", "Stora salen", "2028-03-01T18:00+01", "2028-03-01T22:00+01");
+    const birka = await roomId("Birka");
+    const stora = await roomId("Stora salen");
+    await db.query(`insert into layouts (name, room_id, event_id, items) values
+      ('Teater', $1, $2, '[{"t":"stol"},{"t":"stol"},{"t":"stol"}]'),
+      ('Bankett', $1, $2, '[{"t":"rund180","chairs":10}]'),
+      ('Middag', $3, $4, '[{"t":"rund180","chairs":10},{"t":"rund180","chairs":10}]')`, [birka, a, stora, b]);
+    const r = await db.query<{ furniture_id: string; needed: number; stock: number | null }>(
+      "select furniture_id, needed, stock from furniture_by_day('2028-03-01', '2028-03-01') order by furniture_id");
+    expect(r.rows).toEqual([
+      { furniture_id: "rund180", needed: 3, stock: null },
+      { furniture_id: "stol", needed: 30, stock: 25 },
+    ]);
+  });
+});
+
+describe("körschema", () => {
+  it("visar kundens och personalens punkter på eventlänken och i personalinfon", async () => {
+    const ev = await book("Körschema-test", "bekraftad", "Birka", "2028-04-01T17:00+02", "2028-04-01T23:00+02");
+    await db.query(`insert into run_sheet_items (event_id, starts_at, title, customer_visible, staff_visible) values
+      ($1, '2028-04-01T18:00+02', 'Insläpp', true, true),
+      ($1, '2028-04-01T17:30+02', 'Personalgenomgång', false, true),
+      ($1, '2028-04-01T19:00+02', 'Middag', true, false)`, [ev]);
+    const tok = (await db.query<{ share_token: string }>("select share_token from events where id = $1", [ev])).rows[0].share_token;
+    await db.exec("set role anon");
+    try {
+      const p = await db.query<{ d: { title: string; run_sheet: { title: string }[] } }>("select event_portal($1) as d", [tok]);
+      expect(p.rows[0].d.title).toBe("Körschema-test");
+      expect(p.rows[0].d.run_sheet.map((x) => x.title)).toEqual(["Insläpp", "Middag"]);
+    } finally {
+      await db.exec("reset role");
+    }
+    const s = await db.query<{ d: { run_sheet: { title: string }[]; layouts: unknown[] } }>("select event_staff_info($1) as d", [ev]);
+    expect(s.rows[0].d.run_sheet.map((x) => x.title)).toEqual(["Personalgenomgång", "Insläpp"]);
+    expect(Array.isArray(s.rows[0].d.layouts)).toBe(true);
+  });
+});
+
+describe("personalens tillgänglighet", () => {
+  it("frilansaren markerar ledigt via länken och kedjan hoppar över hen", async () => {
+    const people = await db.query<{ id: string; link_token: string }>(`
+      insert into staff (name, email, kind) values ('Ledig Lisa', 'lisa@x.se', 'frilans'), ('Kalle Kan', 'kalle@x.se', 'frilans')
+      returning id, link_token`);
+    const [lisa, kalle] = people.rows;
+    const sh = await db.query<{ id: string; starts_at: string; ends_at: string }>(
+      `insert into shifts (function_id, staff_kind, starts_at, ends_at, needed)
+       values ((select id from staff_functions where name = 'Ljudtekniker'), 'frilans', now() + interval '20 days', now() + interval '20 days 6 hours', 1)
+       returning id, starts_at::text, ends_at::text`,
+    );
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ r: string }>("select link_unavailability_add($1, now() + interval '19 days', now() + interval '21 days', 'Semester') as r", [lisa.link_token]);
+      expect(r.rows[0].r).toBe("ok");
+      const list = await db.query<{ l: { note: string }[] }>("select link_unavailability($1) as l", [lisa.link_token]);
+      expect(list.rows[0].l.map((x) => x.note)).toEqual(["Semester"]);
+    } finally {
+      await db.exec("reset role");
+    }
+    const shift = sh.rows[0].id;
+    await db.query("insert into shift_assignments (shift_id, staff_id, status, invite_order) values ($1, $2, 'vantar', 1), ($1, $3, 'vantar', 2)", [shift, lisa.id, kalle.id]);
+    await db.query("select advance_invites($1)", [shift]);
+    const st = await db.query<{ staff_id: string; status: string }>("select staff_id, status::text from shift_assignments where shift_id = $1 order by invite_order", [shift]);
+    expect(st.rows.map((x) => x.status)).toEqual(["vantar", "inbjuden"]);
+    const why = await asUser(ADMIN, () => db.query<{ r: string }>("select staff_busy_reason($1, $2::timestamptz, $3::timestamptz) as r", [lisa.id, sh.rows[0].starts_at, sh.rows[0].ends_at]));
+    expect(why.rows[0].r).toBe("Ledig: Semester");
+  });
+});
+
+describe("optionsbevakning", () => {
+  it("påminner kunden, och när kunden släpper får nästa i kön besked", async () => {
+    const c = await db.query<{ id: string }>("insert into contacts (name, email) values ('Anna Kund', 'anna@kund.se'), ('Bo Nästa', 'bo@nasta.se') returning id");
+    const first = await book("Option ett", "preliminar", "Birka", "2099-05-10T09:00+02", "2099-05-10T17:00+02");
+    const second = await book("Option två", "preliminar", "Birka", "2099-05-10T10:00+02", "2099-05-10T15:00+02");
+    await db.query("update events set contact_id = $2, responsible_id = $3, option_expires_on = current_date + 2 where id = $1", [first, c.rows[0].id, ADMIN]);
+    await db.query("update events set contact_id = $2, created_at = now() + interval '1 second' where id = $1", [second, c.rows[1].id]);
+    await db.query("update profiles set notify_kinds = '{option}' where id = $1", [ADMIN]);
+    const n = await db.query<{ n: number }>("select remind_options() as n");
+    expect(n.rows[0].n).toBeGreaterThanOrEqual(1);
+    const m1 = await db.query<{ to_email: string; link: string }>("select to_email, link from email_outbox where event_id = $1 and kind = 'option'", [first]);
+    expect(m1.rows.map((x) => x.to_email)).toEqual(["anna@kund.se"]);
+    const tok = m1.rows[0].link.split("/option/")[1];
+    await db.exec("set role anon");
+    try {
+      const info = await db.query<{ d: { title: string } }>("select option_info($1) as d", [tok]);
+      expect(info.rows[0].d.title).toBe("Option ett");
+      expect((await db.query<{ r: string }>("select option_respond($1, 'slapper', 'Anna') as r", [tok])).rows[0].r).toBe("ok");
+    } finally {
+      await db.exec("reset role");
+    }
+    const st = await db.query<{ status: string }>("select status::text from events where id = $1", [first]);
+    expect(st.rows[0].status).toBe("avbokad");
+    const m2 = await db.query<{ to_email: string }>("select to_email from email_outbox where event_id = $1 and kind = 'option'", [second]);
+    expect(m2.rows.map((x) => x.to_email)).toEqual(["bo@nasta.se"]);
+    const notes = await db.query<{ title: string }>("select title from notifications where profile_id = $1 and kind = 'option' order by created_at", [ADMIN]);
+    expect(notes.rows.map((x) => x.title)).toContain("Kunden släppte optionen: Option ett");
+  });
+});
+
+describe("lokalkort och felanmälan", () => {
+  it("visar kortet utan inloggning och tar emot en felanmälan som admin får notis om", async () => {
+    const birka = await roomId("Birka");
+    await db.query("update rooms set card_info = 'Ljuset tänds vid dörren', contact_info = 'Ring 070-000' where id = $1", [birka]);
+    await db.query("update profiles set notify_kinds = '{fel}' where id = $1", [ADMIN]);
+    const tok = (await db.query<{ card_token: string }>("select card_token from rooms where id = $1", [birka])).rows[0].card_token;
+    await db.exec("set role anon");
+    try {
+      const c = await db.query<{ d: { name: string; card_info: string } }>("select room_card($1) as d", [tok]);
+      expect(c.rows[0].d.name).toBe("Birka");
+      expect(c.rows[0].d.card_info).toBe("Ljuset tänds vid dörren");
+      const r = await db.query<{ r: string }>("select report_room_issue($1, 'Trasig lampa', 'Vänster spot', 'Olle', null, $2) as r", [tok, `fel/${tok}/x.jpg`]);
+      expect(r.rows[0].r).toBe("ok");
+      await expect(db.query("select * from room_issues")).rejects.toThrow();
+    } finally {
+      await db.exec("reset role");
+    }
+    const i = await db.query<{ title: string; photo_path: string }>("select title, photo_path from room_issues where room_id = $1", [birka]);
+    expect(i.rows).toEqual([{ title: "Trasig lampa", photo_path: `fel/${tok}/x.jpg` }]);
+    // Uppladdning kräver lokalens token i sökvägen.
+    const ok = await db.query<{ a: boolean; b: boolean }>("select room_card_path_ok($1) as a, room_card_path_ok('fel/00000000-0000-0000-0000-000000000000/11111111-1111-1111-1111-111111111111.jpg') as b", [`fel/${tok}/11111111-1111-1111-1111-111111111111.jpg`]);
+    expect(ok.rows[0]).toEqual({ a: true, b: false });
+    const n = await db.query<{ title: string }>("select title from notifications where profile_id = $1 and kind = 'fel'", [ADMIN]);
+    expect(n.rows.map((x) => x.title)).toEqual(["Felanmälan i Birka: Trasig lampa"]);
+  });
+});
+
+describe("öppna och stänga huset", () => {
+  it("frilans bockar av via länken, avvikelse kräver kommentar, och signerar", async () => {
+    const st = (await db.query<{ id: string; link_token: string }>("insert into staff (name, kind) values ('Rutin Rut', 'frilans') returning id, link_token")).rows[0];
+    const r = (await db.query<{ id: string }>("select id from routines where name = 'Stänga huset'")).rows[0].id;
+    const steps = (await db.query<{ id: string }>("select id from routine_steps where routine_id = $1 order by sort_order", [r])).rows;
+    await db.exec("set role anon");
+    try {
+      let run = "";
+      for (const [i, s] of steps.entries()) {
+        const res = await db.query<{ r: string }>("select link_routine_check($1, $2, $3, $4, $5) as r", [st.link_token, r, s.id, i !== 2, null]);
+        run = res.rows[0].r;
+      }
+      expect((await db.query<{ r: string }>("select link_routine_sign($1, $2, 'Rut', null) as r", [st.link_token, run])).rows[0].r).toBe("ej_klar");
+      await db.query("select link_routine_check($1, $2, $3, false, 'Kaffebryggaren gick inte att stänga av, ringde Pontus')", [st.link_token, r, steps[2].id]);
+      expect((await db.query<{ r: string }>("select link_routine_sign($1, $2, 'Rut', null) as r", [st.link_token, run])).rows[0].r).toBe("ok");
+      const list = await db.query<{ d: { name: string; runs: { signed_name: string; mine: boolean }[] }[] }>("select link_routines($1) as d", [st.link_token]);
+      const closing = list.rows[0].d.find((x) => x.name === "Stänga huset")!;
+      expect(closing.runs[0].signed_name).toBe("Rut");
+      expect(closing.runs[0].mine).toBe(true);
+    } finally {
+      await db.exec("reset role");
+    }
+  });
+});
+
+describe("statistik", () => {
+  it("räknar beläggning per lokal och månad samt vunna offerter per kategori", async () => {
+    const ev = await book("Statistik-test", "bekraftad", "Birka", "2031-06-10T09:00+02", "2031-06-11T17:00+02");
+    const co = (await db.query<{ id: string }>("insert into companies (name, categories) values ('Stat AB', '{Eventbyrå}') returning id")).rows[0].id;
+    const q = (await db.query<{ id: string }>("insert into quotes (title, status, company_id, event_id, accepted_at, sent_at) values ('S', 'accepterad', $1, $2, '2031-03-05', '2031-03-01') returning id", [co, ev])).rows[0].id;
+    await db.query("insert into quote_lines (quote_id, description, quantity, unit_price, group_id) values ($1, 'Lokal', 1, 10000, (select id from article_groups limit 1))", [q]);
+    const s = await asUser(ADMIN, () => db.query<{ d: { occupancy: { room: string; months: { m: number; days: number; hours: number }[] }[]; quotes: { m: number; won_value: number }[]; by_category: { category: string; value: number }[] } }>("select stats_year(2031) as d"));
+    const d = s.rows[0].d;
+    const birka = d.occupancy.find((x) => x.room === "Birka")!;
+    expect(birka.months[5]).toMatchObject({ m: 6, days: 2 });
+    expect(Number(birka.months[5].hours)).toBe(32);
+    expect(Number(d.quotes[2].won_value)).toBe(10000);
+    expect(d.by_category).toEqual([{ category: "Eventbyrå", count: 1, value: 10000 }]);
+  });
+});
+
+describe("förfrågan från hemsidan", () => {
+  it("skapar förfrågan, kund och kontakt, föreslår ledig lokal och meddelar bokare", async () => {
+    await db.query("update profiles set notify_kinds = notify_kinds || '{forfragan}' where id = $1", [ADMIN]);
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ r: string }>("select submit_inquiry($1) as r", [JSON.stringify({
+        name: "Eva Event", email: "Eva@Firma.se", company: "Firma AB", guests: 40, setup_id: "skol",
+        starts_at: "2030-09-01T09:00:00+02:00", ends_at: "2030-09-01T16:00:00+02:00", message: "Kickoff", event_type_id: "konferens",
+      })]);
+      expect(r.rows[0].r).toBe("ok");
+      const bad = await db.query<{ r: string }>("select submit_inquiry($1) as r", [JSON.stringify({ name: "X", email: "nej", starts_at: "2030-09-01T09:00:00+02:00", ends_at: "2030-09-01T10:00:00+02:00" })]);
+      expect(bad.rows[0].r).toBe("kontakt");
+      const junk = await db.query<{ r: string }>("select submit_inquiry($1) as r", [JSON.stringify({ name: "X", email: "x@y.se", guests: "abc", starts_at: "2030-09-01T09:00:00+02:00", ends_at: "2030-09-01T10:00:00+02:00" })]);
+      expect(junk.rows[0].r).toBe("gaster");
+      const junk2 = await db.query<{ r: string }>("select submit_inquiry($1) as r", [JSON.stringify({ name: "X", email: "x@y.se", starts_at: "igår", ends_at: "nu" })]);
+      expect(junk2.rows[0].r).toBe("tid");
+    } finally {
+      await db.exec("reset role");
+    }
+    const ev = await db.query<{ status: string; participants: number; company: string; contact_email: string; internal_notes: string }>(
+      "select e.status::text, e.participants, c.name as company, ct.email as contact_email, e.internal_notes from events e join companies c on c.id = e.company_id join contacts ct on ct.id = e.contact_id where e.title like 'Konferens – Firma AB'");
+    expect(ev.rows[0]).toMatchObject({ status: "forfragan", participants: 40, company: "Firma AB", contact_email: "eva@firma.se" });
+    expect(ev.rows[0].internal_notes).toContain("Lediga lokaler som passar");
+    const sugg = await db.query<{ n: number }>("select jsonb_array_length(suggested) as n from inquiries order by created_at desc limit 1");
+    expect(sugg.rows[0].n).toBeLessThanOrEqual(3);
+    const n = await db.query<{ title: string }>("select title from notifications where profile_id = $1 and kind = 'forfragan'", [ADMIN]);
+    expect(n.rows.map((x) => x.title)).toEqual(["Ny förfrågan: Firma AB"]);
+  });
+});
+
+describe("granskning: rättningar", () => {
+  it("bara bokare kan skicka optionsmejl", async () => {
+    const ev = await book("Behörighet option", "preliminar", "Birka", "2099-07-01T09:00+02", "2099-07-01T12:00+02");
+    await asUser(LASARE, async () => {
+      await expect(db.query("select send_option_reminder($1)", [ev])).rejects.toThrow(/behörighet/i);
+    });
+  });
+
+  it("den som redan stod först får inget besked när en senare option släpps", async () => {
+    const c = await db.query<{ id: string }>("insert into contacts (name, email) values ('K1', 'k1@x.se'), ('K2', 'k2@x.se'), ('K3', 'k3@x.se') returning id");
+    const ids: string[] = [];
+    for (const [i, t] of ["Kö A", "Kö B", "Kö C"].entries()) {
+      const e = await book(t, "preliminar", "Birka", "2099-08-01T09:00+02", "2099-08-01T12:00+02");
+      await db.query("update events set contact_id = $2, created_at = now() + make_interval(secs => $3) where id = $1", [e, c.rows[i].id, i]);
+      ids.push(e);
+    }
+    const tok = (await db.query<{ t: string }>("select option_token::text as t from events where id = $1", [ids[2]])).rows[0].t;
+    await db.query("select option_respond($1, 'slapper', null)", [tok]);
+    const mails = await db.query<{ n: number }>("select count(*)::int as n from email_outbox where kind = 'option' and event_id = any($1)", [ids]);
+    expect(mails.rows[0].n).toBe(0);
+    // A släpper: B flyttas upp och får besked.
+    const tokA = (await db.query<{ t: string }>("select option_token::text as t from events where id = $1", [ids[0]])).rows[0].t;
+    await db.query("select option_respond($1, 'slapper', null)", [tokA]);
+    const toB = await db.query<{ to_email: string }>("select to_email from email_outbox where kind = 'option' and event_id = $1", [ids[1]]);
+    expect(toB.rows.map((x) => x.to_email)).toEqual(["k2@x.se"]);
+  });
+
+  it("möbler i flera lokaler samma dag summeras inom ett evenemang", async () => {
+    const ev = await book("Två salar", "bekraftad", "Birka", "2031-09-10T09:00+02", "2031-09-10T17:00+02");
+    const birka = await roomId("Birka");
+    const stora = await roomId("Stora salen");
+    await db.query("insert into bookings (event_id, room_id, starts_at, ends_at) values ($1, $2, '2031-09-10T09:00+02', '2031-09-10T17:00+02')", [ev, stora]);
+    await db.query(`insert into layouts (name, room_id, event_id, items) values ('B', $1, $3, '[{"t":"stol"},{"t":"stol"}]'), ('S', $2, $3, '[{"t":"stol"},{"t":"stol"},{"t":"stol"}]')`, [birka, stora, ev]);
+    const r = await db.query<{ needed: number }>("select needed from furniture_by_day('2031-09-10', '2031-09-10') where furniture_id = 'stol'");
+    expect(r.rows[0].needed).toBe(5);
+  });
+});
