@@ -1187,3 +1187,48 @@ describe("kontorsskärm", () => {
     }
   });
 });
+
+describe("månadsfakturering", () => {
+  it("räknar timmar inkl. bygg/riv, högst en dagshyra per dygn, och gör ett offertutkast", async () => {
+    const co = (await db.query<{ id: string }>("insert into companies (name, monthly_billing, monthly_hour_divisor, monthly_discount_pct) values ('Testförsamlingen', true, 10, 60) returning id")).rows[0].id;
+    const karl = await roomId("Karlbergssalen");
+    await db.query("insert into articles (name, group_id, unit, price, room_id) values ('Karlberg test', 'lokal', 'dag', 20000, $1)", [karl]);
+    const ev = (await db.query<{ id: string }>("insert into events (title, status, company_id) values ('Gudstjänst', 'bekraftad', $1) returning id", [co])).rows[0].id;
+    // 3 h + 30 min bygg + 30 min riv = 4 h
+    await db.query("insert into bookings (event_id, room_id, starts_at, ends_at, rig_minutes, strike_minutes) values ($1, $2, '2031-03-08 10:00+01', '2031-03-08 13:00+01', 30, 30)", [ev, karl]);
+    // Två hela dygn: högst 10 h per dygn
+    await db.query("insert into bookings (event_id, room_id, starts_at, ends_at) values ($1, $2, '2031-03-20 00:00+01', '2031-03-22 00:00+01')", [ev, karl]);
+    // Nästa månad räknas inte
+    await db.query("insert into bookings (event_id, room_id, starts_at, ends_at) values ($1, $2, '2031-04-02 10:00+02', '2031-04-02 12:00+02')", [ev, karl]);
+
+    const lines = await db.query<{ hours: string; rig_hours: string; capped: boolean; hourly: string; discount_pct: string; day_price: string }>(
+      "select * from monthly_room_lines($1, '2031-03-01')", [co]);
+    expect(lines.rows.map((l) => Number(l.hours))).toEqual([4, 20]);
+    expect(Number(lines.rows[0].rig_hours)).toBe(1);
+    expect(lines.rows[1].capped).toBe(true);
+    const price = Number(lines.rows[0].day_price);
+    expect(Number(lines.rows[0].hourly)).toBeCloseTo(price / 10);
+    expect(Number(lines.rows[0].discount_pct)).toBe(60);
+
+    const q = (await asUser(ADMIN, () => db.query<{ id: string }>("select create_monthly_quote($1, '2031-03-15') as id", [co]))).rows[0].id;
+    const ov = await db.query<{ total_ex_vat: string; status: string; event_id: string }>("select * from quote_overview where id = $1", [q]);
+    expect(ov.rows[0].status).toBe("utkast");
+    expect(Number(ov.rows[0].total_ex_vat)).toBeCloseTo(24 * (price / 10) * 0.4, 0);
+    const holder = await db.query<{ billing_month: string }>("select billing_month::text from events where id = $1", [ov.rows[0].event_id]);
+    expect(holder.rows[0].billing_month).toBe("2031-03-01");
+    // Samma månad igen ger samma utkast; gör om ersätter det.
+    const again = (await asUser(ADMIN, () => db.query<{ id: string }>("select create_monthly_quote($1, '2031-03-01') as id", [co]))).rows[0].id;
+    expect(again).toBe(q);
+    const redo = (await asUser(ADMIN, () => db.query<{ id: string }>("select create_monthly_quote($1, '2031-03-01', true) as id", [co]))).rows[0].id;
+    expect(redo).not.toBe(q);
+    // Månadsevenemanget räknas inte som bokad tid
+    expect((await db.query("select * from monthly_room_lines($1, '2031-03-01')", [co])).rows.length).toBe(2);
+  });
+
+  it("läsare kan inte skapa månadsoffert", async () => {
+    const co = (await db.query<{ id: string }>("select id from companies where name = 'Testförsamlingen'")).rows[0].id;
+    await asUser(LASARE, async () => {
+      await expect(db.query("select create_monthly_quote($1, '2031-03-01', true)", [co])).rejects.toThrow();
+    });
+  });
+});

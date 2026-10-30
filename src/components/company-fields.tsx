@@ -86,6 +86,22 @@ export function CompanyFields({ company, disabled, categories = DEFAULT_CATEGORI
           <span className="text-xs text-muted">Visas som påminnelse när någon gör en offert till kunden.</span>
         </div>
       </fieldset>
+      <fieldset className="sm:col-span-2 grid gap-3 rounded-lg border border-line p-4 sm:grid-cols-3">
+        <legend className="px-1 text-sm font-semibold">Månadsfakturering av lokalhyra</legend>
+        <label className="flex items-center gap-2 text-sm sm:col-span-3">
+          <input type="checkbox" name="monthly_billing" defaultChecked={company?.monthly_billing ?? false} />
+          Kunden betalar per timme för bokad tid och faktureras en gång i månaden
+        </label>
+        <div className="field">
+          <label className="label" htmlFor="monthly_hour_divisor">Timpris = dagshyra delat på</label>
+          <input className="input text-right" id="monthly_hour_divisor" name="monthly_hour_divisor" inputMode="decimal" defaultValue={company?.monthly_hour_divisor ?? 10} />
+        </div>
+        <div className="field">
+          <label className="label" htmlFor="monthly_discount_pct">Rabatt %</label>
+          <input className="input text-right" id="monthly_discount_pct" name="monthly_discount_pct" inputMode="decimal" defaultValue={company?.monthly_discount_pct ?? 0} />
+        </div>
+        <p className="text-xs text-muted self-end">Ett offertutkast med förra månadens bokade tid skapas den 1:a varje månad under Offerter → Månadsoffert.</p>
+      </fieldset>
     </fieldset>
   );
 }

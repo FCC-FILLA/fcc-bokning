@@ -51,6 +51,9 @@ export type Company = {
   commission_pct?: number | null;
   commission_to?: string | null;
   commission_note?: string | null;
+  monthly_billing?: boolean;
+  monthly_hour_divisor?: number | null;
+  monthly_discount_pct?: number | null;
   address?: string | null;
   postal_code?: string | null;
   city?: string | null;

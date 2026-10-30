@@ -43,6 +43,7 @@ export default async function QuotesPage({ searchParams }: { searchParams: Promi
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold">Offerter</h1>
         <span className="flex-1" />
+        {canBook(profile) && <Link className="btn btn-ghost" href="/offerter/manad">Månadsoffert</Link>}
         {canBook(profile) && <Link className="btn btn-primary" href="/offerter/ny">Ny offert</Link>}
       </div>
 

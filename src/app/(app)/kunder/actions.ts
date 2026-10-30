@@ -27,6 +27,16 @@ function readCompany(fd: FormData) {
     })(),
     commission_to: opt(fd.get("commission_to")),
     commission_note: opt(fd.get("commission_note")),
+    monthly_billing: fd.get("monthly_billing") === "on",
+    ...(() => {
+      const n = (k: string, min: number, max: number) => {
+        const v = Number(String(fd.get(k) ?? "").replace(",", ".").replace("%", ""));
+        return Number.isFinite(v) && v >= min && v <= max ? v : null;
+      };
+      const div = n("monthly_hour_divisor", 0.1, 1000);
+      const disc = n("monthly_discount_pct", 0, 100);
+      return { ...(div != null ? { monthly_hour_divisor: div } : {}), ...(disc != null ? { monthly_discount_pct: disc } : {}) };
+    })(),
     address: opt(fd.get("address")),
     postal_code: opt(fd.get("postal_code")),
     city: opt(fd.get("city")),
