@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireBooker } from "@/lib/auth";
 import { daysBetween, expandRows, parseRows, shiftIso } from "@/lib/bokning";
 import { addDays, isoToDate, localToIso } from "@/lib/datum";
+import { isPhase, retime, shiftMinutes } from "@/lib/serier";
 import { createClient } from "@/lib/supabase/server";
 import { STATUSES } from "@/lib/types";
 
@@ -74,7 +75,9 @@ async function createCustomerInline(fd: FormData, back: string) {
 function readBookings(fd: FormData, eventId: string) {
   const { rows, error } = parseRows(opt(fd.get("rows")));
   if (error) return { rows: [], error };
-  return { rows: expandRows(rows, Number(fd.get("repeat_weeks") ?? 1), eventId), error: null };
+  const ph = fd.get("phase");
+  const phase = isPhase(ph) ? ph : "genomforande";
+  return { rows: expandRows(rows, Number(fd.get("repeat_weeks") ?? 1), eventId).map((r) => ({ ...r, phase })), error: null };
 }
 
 export async function createEvent(fd: FormData) {
@@ -153,7 +156,10 @@ export async function updateBooking(eventId: string, bookingId: string, fd: Form
   const supabase = await createClient();
   const { error } = await supabase
     .from("bookings")
-    .update({ room_id, starts_at, ends_at, setup_id: opt(fd.get("setup_id")), note: opt(fd.get("note")) })
+    .update({
+      room_id, starts_at, ends_at, setup_id: opt(fd.get("setup_id")), note: opt(fd.get("note")),
+      ...(isPhase(fd.get("phase")) ? { phase: fd.get("phase") as string } : {}),
+    })
     .eq("id", bookingId)
     .eq("event_id", eventId);
   revalidatePath("/", "layout");
@@ -168,7 +174,7 @@ export async function copyDay(eventId: string, fromDate: string, fd: FormData) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("bookings")
-    .select("room_id, starts_at, ends_at, setup_id, note")
+    .select("room_id, starts_at, ends_at, setup_id, note, phase")
     .eq("event_id", eventId)
     .gte("starts_at", localToIso(`${fromDate}T00:00`))
     .lt("starts_at", localToIso(`${addDays(fromDate, 1)}T00:00`));
@@ -193,7 +199,7 @@ export async function duplicateEvent(eventId: string, fd: FormData) {
   const supabase = await createClient();
   const [{ data: ev }, { data: bookings }] = await Promise.all([
     supabase.from("events").select("*").eq("id", eventId).single(),
-    supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note").eq("event_id", eventId).order("starts_at"),
+    supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note, phase").eq("event_id", eventId).order("starts_at"),
   ]);
   if (!ev) redirect("/evenemang");
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -233,4 +239,103 @@ export async function moveOption(eventId: string, targetId: string, dir: "upp" |
   }
   revalidatePath("/", "layout");
   redirect(`/evenemang/${eventId}#optioner`);
+}
+
+/** Boknings-id från formuläret, högst 500 och bara giltiga uuid. */
+function readIds(fd: FormData): string[] {
+  let v: unknown[] = fd.getAll("id");
+  if (!v.length) {
+    try {
+      const j = JSON.parse(String(fd.get("ids") ?? "[]"));
+      v = Array.isArray(j) ? j : [];
+    } catch {
+      v = [];
+    }
+  }
+  return v.filter((x): x is string => typeof x === "string" && /^[0-9a-f-]{36}$/i.test(x)).slice(0, 500);
+}
+
+const TIME = /^\d{2}:\d{2}$/;
+
+/** Ändra en hel serie: lokal, klockslag, fas, möblering och notering för alla dess bokningar. Datumen behålls. */
+export async function updateSeries(eventId: string, fd: FormData) {
+  await requireBooker();
+  const ids = readIds(fd);
+  const room_id = opt(fd.get("room_id"));
+  const from = opt(fd.get("from"));
+  const to = opt(fd.get("to"));
+  const phase = fd.get("phase");
+  if (!ids.length || !room_id || !from || !to || !TIME.test(from) || !TIME.test(to) || !isPhase(phase)) {
+    back(eventId, err("Ange lokal, fas, start- och sluttid för serien."));
+  }
+  const supabase = await createClient();
+  const { data } = await supabase.from("bookings").select("id, starts_at").eq("event_id", eventId).in("id", ids);
+  const rows = data ?? [];
+  const common = { room_id, setup_id: opt(fd.get("setup_id")), note: opt(fd.get("note")), phase: phase as string };
+  const results = await Promise.all(
+    rows.map((b) => supabase.from("bookings").update({ ...common, ...retime(b.starts_at, from!, to!) }).eq("id", b.id).eq("event_id", eventId)),
+  );
+  const failed = results.filter((r) => r.error).length;
+  revalidatePath("/", "layout");
+  back(eventId, failed ? err(`${failed} av ${rows.length} bokningar kunde inte ändras.`) : `andrat=${rows.length}&vy=serier`);
+}
+
+/** Ta bort alla bokningar i en serie, eller bara vissa datum ur den. */
+export async function deleteSeries(eventId: string, fd: FormData) {
+  await requireBooker();
+  const ids = readIds(fd);
+  if (!ids.length) back(eventId, err("Inga bokningar valda."));
+  const supabase = await createClient();
+  const { error, count } = await supabase.from("bookings").delete({ count: "exact" }).eq("event_id", eventId).in("id", ids);
+  revalidatePath("/", "layout");
+  back(eventId, error ? err("Det gick inte att ta bort bokningarna.") : `borttaget=${count ?? ids.length}&vy=serier`);
+}
+
+/**
+ * Massändring av evenemangets bokningar som matchar ett urval (lokal, period, fas):
+ * flytta i tid, byt fas eller ta bort.
+ */
+export async function bulkEditBookings(eventId: string, fd: FormData) {
+  await requireBooker();
+  const room = opt(fd.get("room_id"));
+  const fromDate = opt(fd.get("from_date"));
+  const toDate = opt(fd.get("to_date"));
+  const onlyPhase = fd.get("only_phase");
+  const action = String(fd.get("action") ?? "");
+  const supabase = await createClient();
+
+  let q = supabase.from("bookings").select("id, room_id, starts_at, ends_at").eq("event_id", eventId);
+  if (room) q = q.eq("room_id", room);
+  if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) q = q.gte("starts_at", localToIso(`${fromDate}T00:00`));
+  if (toDate && /^\d{4}-\d{2}-\d{2}$/.test(toDate)) q = q.lt("starts_at", localToIso(`${addDays(toDate, 1)}T00:00`));
+  if (isPhase(onlyPhase)) q = q.eq("phase", onlyPhase);
+  const { data } = await q;
+  const rows = data ?? [];
+  if (!rows.length) back(eventId, err("Inga bokningar matchar urvalet.") + "&vy=serier");
+
+  let failed = 0;
+  if (action === "flytta") {
+    const startMin = Number(fd.get("shift_start") ?? 0) || 0;
+    const endMin = Number(fd.get("shift_end") ?? 0) || 0;
+    if (!startMin && !endMin) back(eventId, err("Ange hur många minuter start eller slut ska flyttas.") + "&vy=serier");
+    for (const b of rows) {
+      const starts_at = shiftMinutes(b.starts_at, startMin);
+      const ends_at = shiftMinutes(b.ends_at, endMin);
+      if (ends_at <= starts_at) { failed++; continue; }
+      const { error } = await supabase.from("bookings").update({ starts_at, ends_at }).eq("id", b.id).eq("event_id", eventId);
+      if (error) failed++;
+    }
+  } else if (action === "fas") {
+    const phase = fd.get("phase");
+    if (!isPhase(phase)) back(eventId, err("Välj fas.") + "&vy=serier");
+    const { error } = await supabase.from("bookings").update({ phase: phase as string }).eq("event_id", eventId).in("id", rows.map((r) => r.id));
+    if (error) failed = rows.length;
+  } else if (action === "ta-bort") {
+    const { error } = await supabase.from("bookings").delete().eq("event_id", eventId).in("id", rows.map((r) => r.id));
+    if (error) failed = rows.length;
+  } else {
+    back(eventId, err("Välj vad som ska göras.") + "&vy=serier");
+  }
+  revalidatePath("/", "layout");
+  back(eventId, failed ? err(`${failed} av ${rows.length} bokningar kunde inte ändras.`) + "&vy=serier" : `andrat=${rows.length}&vy=serier`);
 }

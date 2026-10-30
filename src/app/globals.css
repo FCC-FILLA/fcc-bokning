@@ -66,6 +66,10 @@ h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; }
 
   .card { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 12px; }
 
+  .ph-bygg { background: var(--color-sunk); color: var(--color-muted); border-color: var(--color-line); }
+  .ph-genomforande { background: var(--color-brand-soft); color: var(--color-brand); border-color: var(--color-brand); }
+  .ph-riv { background: var(--color-st-preliminar-soft); color: var(--color-st-preliminar); border-color: var(--color-st-preliminar); }
+
   .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
   .st-forfragan { background: var(--color-st-forfragan-soft); color: var(--color-st-forfragan); border-color: var(--color-st-forfragan); }
   .st-preliminar { background: var(--color-st-preliminar-soft); color: var(--color-st-preliminar); border-color: var(--color-st-preliminar); }

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 type RoomOption = { id: string; name: string; depth: number };
 type SetupOption = { id: string; name: string };
-export type TemplateRow = { day: number; room_id: string; from: string; to: string; setup_id: string; note: string };
+export type TemplateRow = { day: number; room_id: string; from: string; to: string; setup_id: string; note: string; phase?: string };
 type Row = TemplateRow & { key: number };
 
 let k = 1;
@@ -15,19 +15,20 @@ export function TemplateRows({ rooms, setups, initial, readOnly }: { rooms: Room
     (initial.length ? initial : [{ day: 1, room_id: "", from: "08:00", to: "17:00", setup_id: "", note: "" }]).map((r) => ({ ...r, key: k++ })),
   );
   const update = (key: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
-  const payload = JSON.stringify(rows.filter((r) => r.room_id).map(({ day, room_id, from, to, setup_id, note }) => ({ day, room_id, from, to, setup_id, note })));
+  const payload = JSON.stringify(rows.filter((r) => r.room_id).map(({ day, room_id, from, to, setup_id, note, phase }) => ({ day, room_id, from, to, setup_id, note, phase: phase || "genomforande" })));
 
   return (
     <div className="grid gap-3">
       <input type="hidden" name="template_rows" value={payload} />
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm border-separate border-spacing-y-1.5">
+        <table className="w-full min-w-[900px] text-sm border-separate border-spacing-y-1.5">
           <thead>
             <tr className="text-left">
               <th className="label font-semibold w-20">Dag</th>
               <th className="label font-semibold">Lokal</th>
               <th className="label font-semibold w-28">Från</th>
               <th className="label font-semibold w-28">Till</th>
+              <th className="label font-semibold w-36">Fas</th>
               <th className="label font-semibold w-40">Möblering</th>
               <th className="label font-semibold">Notering</th>
               {!readOnly && <th className="w-28" />}
@@ -49,6 +50,13 @@ export function TemplateRows({ rooms, setups, initial, readOnly }: { rooms: Room
                 <td className="pr-2">
                   <input className="input" type="time" step={900} value={r.to} disabled={readOnly} aria-label={`Till rad ${i + 1}`} onChange={(e) => update(r.key, { to: e.target.value })} />
                   {r.to && r.from && r.to <= r.from && <span className="block text-xs text-muted">slutar nästa dag</span>}
+                </td>
+                <td className="pr-2">
+                  <select className="input" value={r.phase || "genomforande"} disabled={readOnly} aria-label={`Fas rad ${i + 1}`} onChange={(e) => update(r.key, { phase: e.target.value })}>
+                    <option value="bygg">Bygg</option>
+                    <option value="genomforande">Genomförande</option>
+                    <option value="riv">Riv</option>
+                  </select>
                 </td>
                 <td className="pr-2">
                   <select className="input" value={r.setup_id} disabled={readOnly} aria-label={`Möblering rad ${i + 1}`} onChange={(e) => update(r.key, { setup_id: e.target.value })}>
