@@ -6,9 +6,10 @@ import { fmtDate, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
 import { loadCompany } from "@/lib/foretag";
 import { ATTEST_LABEL, shiftHours, workedHours, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
-import { addLinkUnavailability, removeLinkUnavailability, reportTime, respond, saveLinkDetails } from "./actions";
+import { addLinkUnavailability, checkLinkRoutine, signLinkRoutine, removeLinkUnavailability, reportTime, respond, saveLinkDetails } from "./actions";
 import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
 import { UnavailabilityForm, type Unavailable } from "@/components/unavailability";
+import { ROUTINE_MSG, Routines, type RoutineDoc } from "@/components/routines";
 
 export const metadata: Metadata = { title: "Mina pass", robots: { index: false, follow: false } };
 
@@ -41,7 +42,7 @@ export default async function LinkPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string; uppgifter?: string; ledig?: string }>;
+  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string; uppgifter?: string; ledig?: string; huset?: string; signerad?: string; rutinfel?: string }>;
 }) {
   const { token } = await params;
   const sp = await searchParams;
@@ -53,7 +54,10 @@ export default async function LinkPage({
     supabase.rpc("link_details", { p_token: token }),
     supabase.rpc("link_staff_info", { p_token: token }),
   ]);
-  const { data: unavail } = await supabase.rpc("link_unavailability", { p_token: token });
+  const [{ data: unavail }, { data: routines }] = await Promise.all([
+    supabase.rpc("link_unavailability", { p_token: token }),
+    supabase.rpc("link_routines", { p_token: token }),
+  ]);
   if (!data) notFound();
   const doc = data as { name: string; company: string | null; kind: "frilans" | "leverantor"; shifts: LinkShift[] };
   const now = new Date().toISOString();
@@ -145,6 +149,21 @@ export default async function LinkPage({
           <details className="card p-4" open={!pending.length && !upcoming.length}>
             <summary className="cursor-pointer font-medium">Bra att veta</summary>
             <div className="mt-3"><StaffInfoBlocks blocks={(info ?? []) as StaffInfoBlock[]} /></div>
+          </details>
+        )}
+        {!supplier && ((routines ?? []) as RoutineDoc[]).length > 0 && (
+          <details id="huset" className="card p-4 scroll-mt-4" open={!!sp.huset}>
+            <summary className="cursor-pointer font-medium">Öppna och stänga huset</summary>
+            <div className="mt-3">
+              {sp.signerad && <p className="mb-3 rounded-lg bg-st-genomford-soft px-4 py-2 text-sm text-ok">Tack! Genomgången är signerad.</p>}
+              <Routines
+                routines={(routines ?? []) as RoutineDoc[]}
+                check={checkLinkRoutine.bind(null, token)}
+                sign={signLinkRoutine.bind(null, token)}
+                defaultName={doc.name}
+                message={sp.rutinfel ? ROUTINE_MSG[sp.rutinfel] ?? "Något gick fel." : null}
+              />
+            </div>
           </details>
         )}
         {!supplier && (

@@ -51,6 +51,7 @@ const SECTIONS: Section[] = [
       { href: "/personal/personer", label: "Personer" },
       { href: "/personal/funktioner", label: "Funktioner" },
       { href: "/personal/info", label: "Info till personalen" },
+      { href: "/personal/rutiner", label: "Öppna och stänga" },
     ],
   },
   {

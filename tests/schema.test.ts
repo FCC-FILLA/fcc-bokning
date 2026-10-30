@@ -1040,3 +1040,28 @@ describe("lokalkort och felanmälan", () => {
     expect(n.rows.map((x) => x.title)).toEqual(["Felanmälan i Birka: Trasig lampa"]);
   });
 });
+
+describe("öppna och stänga huset", () => {
+  it("frilans bockar av via länken, avvikelse kräver kommentar, och signerar", async () => {
+    const st = (await db.query<{ id: string; link_token: string }>("insert into staff (name, kind) values ('Rutin Rut', 'frilans') returning id, link_token")).rows[0];
+    const r = (await db.query<{ id: string }>("select id from routines where name = 'Stänga huset'")).rows[0].id;
+    const steps = (await db.query<{ id: string }>("select id from routine_steps where routine_id = $1 order by sort_order", [r])).rows;
+    await db.exec("set role anon");
+    try {
+      let run = "";
+      for (const [i, s] of steps.entries()) {
+        const res = await db.query<{ r: string }>("select link_routine_check($1, $2, $3, $4, $5) as r", [st.link_token, r, s.id, i !== 2, null]);
+        run = res.rows[0].r;
+      }
+      expect((await db.query<{ r: string }>("select link_routine_sign($1, $2, 'Rut', null) as r", [st.link_token, run])).rows[0].r).toBe("ej_klar");
+      await db.query("select link_routine_check($1, $2, $3, false, 'Kaffebryggaren gick inte att stänga av, ringde Pontus')", [st.link_token, r, steps[2].id]);
+      expect((await db.query<{ r: string }>("select link_routine_sign($1, $2, 'Rut', null) as r", [st.link_token, run])).rows[0].r).toBe("ok");
+      const list = await db.query<{ d: { name: string; runs: { signed_name: string; mine: boolean }[] }[] }>("select link_routines($1) as d", [st.link_token]);
+      const closing = list.rows[0].d.find((x) => x.name === "Stänga huset")!;
+      expect(closing.runs[0].signed_name).toBe("Rut");
+      expect(closing.runs[0].mine).toBe(true);
+    } finally {
+      await db.exec("reset role");
+    }
+  });
+});

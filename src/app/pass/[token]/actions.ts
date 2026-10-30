@@ -84,3 +84,19 @@ export async function removeLinkUnavailability(token: string, id: string) {
   revalidatePath(`/pass/${token}`);
   redirect(`/pass/${token}?ledig=1#ledighet`);
 }
+
+export async function checkLinkRoutine(token: string, routineId: string, stepId: string, done: boolean, fd: FormData) {
+  if (!/^[0-9a-f-]{36}$/i.test(token)) redirect("/");
+  const supabase = await createClient();
+  await supabase.rpc("link_routine_check", { p_token: token, p_routine: routineId, p_step: stepId, p_done: done, p_note: String(fd.get("note") ?? "") });
+  revalidatePath(`/pass/${token}`);
+  redirect(`/pass/${token}?huset=1#rutin-${routineId}`);
+}
+
+export async function signLinkRoutine(token: string, runId: string, fd: FormData) {
+  if (!/^[0-9a-f-]{36}$/i.test(token)) redirect("/");
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("link_routine_sign", { p_token: token, p_run: runId, p_name: String(fd.get("name") ?? ""), p_note: String(fd.get("note") ?? "") });
+  revalidatePath(`/pass/${token}`);
+  redirect(`/pass/${token}?huset=1${data === "ok" ? "&signerad=1" : `&rutinfel=${String(data)}`}#huset`);
+}

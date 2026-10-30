@@ -109,3 +109,17 @@ export async function removeMyUnavailability(id: string) {
   revalidatePath("/portal");
   redirect("/portal?flik=ledighet");
 }
+
+export async function checkMyRoutine(routineId: string, stepId: string, done: boolean, fd: FormData) {
+  const supabase = await createClient();
+  await supabase.rpc("my_routine_check", { p_routine: routineId, p_step: stepId, p_done: done, p_note: String(fd.get("note") ?? "") });
+  revalidatePath("/portal");
+  redirect(`/portal?flik=huset#rutin-${routineId}`);
+}
+
+export async function signMyRoutine(runId: string, fd: FormData) {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("my_routine_sign", { p_run: runId, p_name: String(fd.get("name") ?? ""), p_note: String(fd.get("note") ?? "") });
+  revalidatePath("/portal");
+  redirect(`/portal?flik=huset${data === "ok" ? "&signerad=1" : `&rutinfel=${String(data)}`}`);
+}
