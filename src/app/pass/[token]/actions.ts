@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { localToIso } from "@/lib/datum";
 import { kickMail } from "@/lib/epost";
 import { createClient } from "@/lib/supabase/server";
+import { readUnavailability } from "@/lib/ledighet";
 
 const MSG: Record<string, string> = {
   ogiltig: "Länken fungerar inte längre.",
@@ -64,4 +65,22 @@ export async function saveLinkDetails(token: string, fd: FormData) {
   const { data } = await supabase.rpc("link_details_save", { p_token: token, p: detailsFromForm(fd) });
   revalidatePath(`/pass/${token}`);
   redirect(`/pass/${token}?${data === "ok" ? "uppgifter=1" : "fel=" + encodeURIComponent("Det gick inte att spara.")}#uppgifter`);
+}
+
+export async function addLinkUnavailability(token: string, fd: FormData) {
+  if (!/^[0-9a-f-]{36}$/i.test(token)) redirect("/");
+  const r = readUnavailability(fd);
+  if (!r) redirect(`/pass/${token}?fel=${encodeURIComponent("Kontrollera dagarna och tiderna.")}#ledighet`);
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("link_unavailability_add", { p_token: token, p_from: r!.from, p_to: r!.to, p_note: r!.note });
+  revalidatePath(`/pass/${token}`);
+  redirect(`/pass/${token}?${data === "ok" ? "ledig=1" : `fel=${encodeURIComponent("Det gick inte att spara.")}`}#ledighet`);
+}
+
+export async function removeLinkUnavailability(token: string, id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(token)) redirect("/");
+  const supabase = await createClient();
+  await supabase.rpc("link_unavailability_delete", { p_token: token, p_id: id });
+  revalidatePath(`/pass/${token}`);
+  redirect(`/pass/${token}?ledig=1#ledighet`);
 }

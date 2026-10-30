@@ -1,5 +1,6 @@
 import { StaffInfoBlocks, type StaffInfoBlock } from "@/components/staff-info";
 import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
+import { UnavailabilityForm, type Unavailable } from "@/components/unavailability";
 import { EventInfo, type StaffEventInfo } from "@/components/event-info";
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
@@ -8,7 +9,7 @@ import { fmtDate, fmtTime, isoToDate, isoToLocal, weekday } from "@/lib/datum";
 import { ASSIGNMENT_LABEL, ATTEST_LABEL, shiftHours, workedHours, type AssignmentStatus, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
 import { PushToggle } from "@/components/push-toggle";
-import { apply, removePush, reportTime, saveMyDetails, savePush, signOut, withdraw } from "./actions";
+import { addMyUnavailability, apply, removeMyUnavailability, removePush, reportTime, saveMyDetails, savePush, signOut, withdraw } from "./actions";
 
 export const metadata: Metadata = {
   title: "Mina pass",
@@ -47,6 +48,7 @@ const TABS = [
   { id: "lediga", label: "Lediga pass" },
   { id: "tidigare", label: "Tidigare" },
   { id: "info", label: "Bra att veta" },
+  { id: "ledighet", label: "Kan inte jobba" },
   { id: "uppgifter", label: "Mina uppgifter" },
 ] as const;
 
@@ -54,10 +56,11 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const profile = await requireProfile();
   const supabase = await createClient();
-  const [{ data }, { data: info }, { data: details }, { data: me }] = await Promise.all([
+  const [{ data }, { data: info }, { data: details }, { data: unavail }, { data: me }] = await Promise.all([
     supabase.rpc("portal_shifts"),
     supabase.rpc("my_staff_info"),
     supabase.rpc("my_details"),
+    supabase.rpc("my_unavailability"),
     supabase.from("staff").select("name, staff_skills(staff_functions(name))").eq("profile_id", profile.id).maybeSingle(),
   ]);
   const all = (data ?? []) as PortalShift[];
@@ -128,6 +131,12 @@ export default async function PortalPage({ searchParams }: { searchParams: Promi
         {sp.sparad && <p className="rounded-lg bg-st-genomford-soft px-4 py-3 text-sm text-ok">Tack! Dina uppgifter är sparade.</p>}
         {tab === "info" ? (
           <StaffInfoBlocks blocks={(info ?? []) as StaffInfoBlock[]} />
+        ) : tab === "ledighet" ? (
+          me ? (
+            <section className="card p-5"><UnavailabilityForm list={(unavail ?? []) as Unavailable[]} add={addMyUnavailability} remove={removeMyUnavailability} /></section>
+          ) : (
+            <div className="card p-8 text-center text-muted">Ditt konto är inte kopplat till personalregistret ännu.</div>
+          )
         ) : tab === "uppgifter" ? (
           details ? (
             <section className="card p-5 grid gap-3">

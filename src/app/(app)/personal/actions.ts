@@ -7,6 +7,7 @@ import { addDays, localToIso } from "@/lib/datum";
 import { kickMail } from "@/lib/epost";
 import { notify, shiftLabel } from "@/lib/push";
 import { createClient } from "@/lib/supabase/server";
+import { readUnavailability } from "@/lib/ledighet";
 
 const opt = (v: FormDataEntryValue | null) => {
   const s = typeof v === "string" ? v.trim() : "";
@@ -295,4 +296,23 @@ export async function sendInvites(shiftId: string) {
   refresh(back);
   if (error) fail(back, "Det gick inte att skicka inbjudningarna.");
   redirect(`${back}?inbjudna=${data ?? 0}#inbjudningar`);
+}
+
+/** Planeraren lägger in eller tar bort ledighet åt en person. */
+export async function addStaffUnavailability(staffId: string, fd: FormData) {
+  await requireStaffManager();
+  const r = readUnavailability(fd);
+  if (!r) redirect(`/personal/personer/${staffId}?fel=${encodeURIComponent("Kontrollera dagarna och tiderna.")}#ledighet`);
+  const supabase = await createClient();
+  await supabase.from("staff_unavailability").insert({ staff_id: staffId, starts_at: r!.from, ends_at: r!.to, note: r!.note || null });
+  revalidatePath(`/personal/personer/${staffId}`);
+  redirect(`/personal/personer/${staffId}#ledighet`);
+}
+
+export async function removeStaffUnavailability(staffId: string, id: string) {
+  await requireStaffManager();
+  const supabase = await createClient();
+  await supabase.from("staff_unavailability").delete().eq("id", id).eq("staff_id", staffId);
+  revalidatePath(`/personal/personer/${staffId}`);
+  redirect(`/personal/personer/${staffId}#ledighet`);
 }

@@ -6,8 +6,9 @@ import { fmtDate, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
 import { loadCompany } from "@/lib/foretag";
 import { ATTEST_LABEL, shiftHours, workedHours, type AttestStatus } from "@/lib/personal";
 import { createClient } from "@/lib/supabase/server";
-import { reportTime, respond, saveLinkDetails } from "./actions";
+import { addLinkUnavailability, removeLinkUnavailability, reportTime, respond, saveLinkDetails } from "./actions";
 import { StaffDetailsForm, type StaffDetails } from "@/components/staff-details-form";
+import { UnavailabilityForm, type Unavailable } from "@/components/unavailability";
 
 export const metadata: Metadata = { title: "Mina pass", robots: { index: false, follow: false } };
 
@@ -40,7 +41,7 @@ export default async function LinkPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string; uppgifter?: string }>;
+  searchParams: Promise<{ fel?: string; ja?: string; nej?: string; tid?: string; uppgifter?: string; ledig?: string }>;
 }) {
   const { token } = await params;
   const sp = await searchParams;
@@ -52,6 +53,7 @@ export default async function LinkPage({
     supabase.rpc("link_details", { p_token: token }),
     supabase.rpc("link_staff_info", { p_token: token }),
   ]);
+  const { data: unavail } = await supabase.rpc("link_unavailability", { p_token: token });
   if (!data) notFound();
   const doc = data as { name: string; company: string | null; kind: "frilans" | "leverantor"; shifts: LinkShift[] };
   const now = new Date().toISOString();
@@ -143,6 +145,14 @@ export default async function LinkPage({
           <details className="card p-4" open={!pending.length && !upcoming.length}>
             <summary className="cursor-pointer font-medium">Bra att veta</summary>
             <div className="mt-3"><StaffInfoBlocks blocks={(info ?? []) as StaffInfoBlock[]} /></div>
+          </details>
+        )}
+        {!supplier && (
+          <details id="ledighet" className="card p-4 scroll-mt-4" open={!!sp.ledig}>
+            <summary className="cursor-pointer font-medium">När jag inte kan jobba</summary>
+            <div className="mt-3">
+              <UnavailabilityForm list={(unavail ?? []) as Unavailable[]} add={addLinkUnavailability.bind(null, token)} remove={removeLinkUnavailability.bind(null, token)} />
+            </div>
           </details>
         )}
         {details && (

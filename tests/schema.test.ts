@@ -956,3 +956,33 @@ describe("körschema", () => {
     expect(Array.isArray(s.rows[0].d.layouts)).toBe(true);
   });
 });
+
+describe("personalens tillgänglighet", () => {
+  it("frilansaren markerar ledigt via länken och kedjan hoppar över hen", async () => {
+    const people = await db.query<{ id: string; link_token: string }>(`
+      insert into staff (name, email, kind) values ('Ledig Lisa', 'lisa@x.se', 'frilans'), ('Kalle Kan', 'kalle@x.se', 'frilans')
+      returning id, link_token`);
+    const [lisa, kalle] = people.rows;
+    const sh = await db.query<{ id: string; starts_at: string; ends_at: string }>(
+      `insert into shifts (function_id, staff_kind, starts_at, ends_at, needed)
+       values ((select id from staff_functions where name = 'Ljudtekniker'), 'frilans', now() + interval '20 days', now() + interval '20 days 6 hours', 1)
+       returning id, starts_at::text, ends_at::text`,
+    );
+    await db.exec("set role anon");
+    try {
+      const r = await db.query<{ r: string }>("select link_unavailability_add($1, now() + interval '19 days', now() + interval '21 days', 'Semester') as r", [lisa.link_token]);
+      expect(r.rows[0].r).toBe("ok");
+      const list = await db.query<{ l: { note: string }[] }>("select link_unavailability($1) as l", [lisa.link_token]);
+      expect(list.rows[0].l.map((x) => x.note)).toEqual(["Semester"]);
+    } finally {
+      await db.exec("reset role");
+    }
+    const shift = sh.rows[0].id;
+    await db.query("insert into shift_assignments (shift_id, staff_id, status, invite_order) values ($1, $2, 'vantar', 1), ($1, $3, 'vantar', 2)", [shift, lisa.id, kalle.id]);
+    await db.query("select advance_invites($1)", [shift]);
+    const st = await db.query<{ staff_id: string; status: string }>("select staff_id, status::text from shift_assignments where shift_id = $1 order by invite_order", [shift]);
+    expect(st.rows.map((x) => x.status)).toEqual(["vantar", "inbjuden"]);
+    const why = await asUser(ADMIN, () => db.query<{ r: string }>("select staff_busy_reason($1, $2::timestamptz, $3::timestamptz) as r", [lisa.id, sh.rows[0].starts_at, sh.rows[0].ends_at]));
+    expect(why.rows[0].r).toBe("Ledig: Semester");
+  });
+});
