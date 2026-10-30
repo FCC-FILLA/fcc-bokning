@@ -142,13 +142,15 @@ export default async function DashboardPage() {
     .filter((x) => x.filled < x.needed);
   const missingPeople = understaffed.reduce((n, x) => n + x.needed - x.filled, 0);
   // För kort omställning och möbler som inte räcker de närmaste 30 dagarna.
-  const [{ data: coData }, { data: furnData }] = await Promise.all([
+  const [{ data: coData }, { data: furnData }, { data: issueData }] = await Promise.all([
     supabase.from("changeover_warnings").select("booking_id, next_booking_id, event_id, event_title, next_event_id, next_event_title, room_name, ends_at, gap_minutes, needed_minutes").gte("next_starts_at", nowIso).lt("next_starts_at", dayStartIso(addDays(today, 30))).order("ends_at").limit(20),
     supabase.rpc("furniture_by_day", { p_from: today, p_to: addDays(today, 30) }),
+    supabase.from("room_issues").select("id, title, created_at, rooms(name)").eq("status", "ny").order("created_at", { ascending: false }).limit(10),
   ]);
+  const newIssues = (issueData ?? []) as unknown as { id: string; title: string; created_at: string; rooms: { name: string } | null }[];
   const shortChanges = (coData ?? []) as { booking_id: string; next_booking_id: string; event_id: string; event_title: string; next_event_id: string; next_event_title: string; room_name: string; ends_at: string; gap_minutes: number; needed_minutes: number }[];
   const shortages = ((furnData ?? []) as { day: string; furniture_id: string; name: string; needed: number; stock: number | null }[]).filter((x) => x.stock != null && x.needed > x.stock);
-  const actionCount = conflicts.length + options.length + expiredSent.length + oldInquiries.length + understaffed.length + shortChanges.length + shortages.length;
+  const actionCount = conflicts.length + options.length + expiredSent.length + oldInquiries.length + understaffed.length + shortChanges.length + shortages.length + newIssues.length;
 
   // Kommande veckan: ett evenemang per dag med tider och lokaler.
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i));
@@ -259,6 +261,17 @@ export default async function DashboardPage() {
                   {" och "}
                   <Link className="font-semibold hover:underline" href={`/evenemang/${c.other_event_id}`}>{c.other_event_title}</Link>
                   <span className="block text-muted">{c.room_name} / {c.other_room_name}, {fmtDate(c.starts_at)}</span>
+                </li>
+              ))}
+            </Todo>
+          )}
+
+          {newIssues.length > 0 && (
+            <Todo title={`Nya felanmälningar (${newIssues.length})`} href="/lokaler/fel">
+              {newIssues.slice(0, 4).map((x) => (
+                <li key={x.id}>
+                  <Link className="font-semibold hover:underline" href={`/lokaler/fel#${x.id}`}>{x.title}</Link>
+                  <span className="block text-muted">{x.rooms?.name}, {fmtDate(x.created_at)}</span>
                 </li>
               ))}
             </Todo>

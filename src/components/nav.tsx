@@ -15,6 +15,7 @@ const SECTIONS: Section[] = [
       { href: "/", label: "Översikt" },
       { href: "/uppgifter", label: "Mina uppgifter" },
       { href: "/notiser", label: "Notiser" },
+      { href: "/lokaler/fel", label: "Felanmälningar" },
     ],
   },
   {

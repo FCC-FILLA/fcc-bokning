@@ -13,6 +13,7 @@ const KINDS: { id: string; label: string; help: string }[] = [
   { id: "checklista", label: "Checklistor", help: "när en kund bockar av en punkt på eventsidan" },
   { id: "tid", label: "Tidrapporter", help: "när personal rapporterar sin tid" },
   { id: "uppgift", label: "Uppgifter", help: "när du får en uppgift och dagen innan den ska vara klar" },
+  { id: "fel", label: "Felanmälningar", help: "när någon felanmäler i en lokal via QR-skylten" },
   { id: "option", label: "Optioner", help: "när kunden påminns, svarar eller släpper en option, och när en option gått ut" },
 ];
 

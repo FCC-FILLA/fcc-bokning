@@ -207,6 +207,9 @@ export default async function SchedulePage({
                   >
                     {room.name}
                     {room.kvm != null && <span className="block text-xs font-normal text-muted font-mono">{room.kvm} kvm</span>}
+                    {(room as Room & { blocked?: boolean }).blocked && (
+                      <span className="block text-xs font-semibold text-warn" title={(room as Room & { blocked_reason?: string | null }).blocked_reason ?? undefined}>Spärrad</span>
+                    )}
                   </th>
                   {days.map((d) => {
                     const direct = visible.filter((b) => b.room_id === room.id && inDay(b, d));

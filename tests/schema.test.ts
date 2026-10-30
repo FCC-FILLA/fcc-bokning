@@ -1016,3 +1016,27 @@ describe("optionsbevakning", () => {
     expect(notes.rows.map((x) => x.title)).toContain("Kunden släppte optionen: Option ett");
   });
 });
+
+describe("lokalkort och felanmälan", () => {
+  it("visar kortet utan inloggning och tar emot en felanmälan som admin får notis om", async () => {
+    const birka = await roomId("Birka");
+    await db.query("update rooms set card_info = 'Ljuset tänds vid dörren', contact_info = 'Ring 070-000' where id = $1", [birka]);
+    await db.query("update profiles set notify_kinds = '{fel}' where id = $1", [ADMIN]);
+    const tok = (await db.query<{ card_token: string }>("select card_token from rooms where id = $1", [birka])).rows[0].card_token;
+    await db.exec("set role anon");
+    try {
+      const c = await db.query<{ d: { name: string; card_info: string } }>("select room_card($1) as d", [tok]);
+      expect(c.rows[0].d.name).toBe("Birka");
+      expect(c.rows[0].d.card_info).toBe("Ljuset tänds vid dörren");
+      const r = await db.query<{ r: string }>("select report_room_issue($1, 'Trasig lampa', 'Vänster spot', 'Olle', null, 'fel/x.jpg') as r", [tok]);
+      expect(r.rows[0].r).toBe("ok");
+      await expect(db.query("select * from room_issues")).rejects.toThrow();
+    } finally {
+      await db.exec("reset role");
+    }
+    const i = await db.query<{ title: string; photo_path: string }>("select title, photo_path from room_issues where room_id = $1", [birka]);
+    expect(i.rows).toEqual([{ title: "Trasig lampa", photo_path: "fel/x.jpg" }]);
+    const n = await db.query<{ title: string }>("select title from notifications where profile_id = $1 and kind = 'fel'", [ADMIN]);
+    expect(n.rows.map((x) => x.title)).toEqual(["Felanmälan i Birka: Trasig lampa"]);
+  });
+});
