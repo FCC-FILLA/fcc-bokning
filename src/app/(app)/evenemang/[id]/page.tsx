@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { canBook, requireProfile } from "@/lib/auth";
-import { addDays, dayLong, fmtDate, fmtDayMonth, fmtRange, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
+import { addDays, dayLong, fmtDate, fmtDayMonth, fmtMinutes, fmtRange, fmtTime, isoToDate, isoToLocal } from "@/lib/datum";
+import { RIG_OPTIONS, rigLabel, withRig } from "@/lib/rigg";
 import { daysBetween, optionOrdinal as ordinal } from "@/lib/bokning";
 import { depthOf } from "@/lib/lokaler";
 import { getLookups } from "@/lib/lookups";
 import { QUOTE_STATUS_LABEL, fmtKr, type QuoteStatus } from "@/lib/offert";
 import { createClient } from "@/lib/supabase/server";
-import type { Booking, BookingConflict, EventRow } from "@/lib/types";
+import type { Booking, BookingConflict, ChangeoverWarning, EventRow } from "@/lib/types";
 import { BookingFields } from "@/components/booking-fields";
 import { ConfirmButton } from "@/components/confirm-button";
 import { EventFields } from "@/components/event-fields";
@@ -48,6 +49,9 @@ export default async function EventPage({
     getLookups(),
   ]);
   const { data: queueData } = await supabase.rpc("option_queue", { p_event: id });
+  // För kort omställning före eller efter någon av evenemangets bokningar.
+  const { data: coData } = await supabase.from("changeover_warnings").select("*").or(`event_id.eq.${id},next_event_id.eq.${id}`);
+  const changeovers = (coData ?? []) as ChangeoverWarning[];
   const queue = (queueData ?? []) as QueueRow[];
   const myPlace = queue.find((x) => x.event_id === id)?.place;
   if (!event) notFound();
@@ -229,6 +233,8 @@ export default async function EventPage({
                         <ul className="grid">
                           {list.map((b) => {
                             const cs = conflictsFor(b.id);
+                            const coBefore = changeovers.filter((c) => c.next_booking_id === b.id);
+                            const coAfter = changeovers.filter((c) => c.booking_id === b.id);
                             const cap = capacity(b.room_id, b.setup_id);
                             const over = cap != null && ev.participants != null && ev.participants > cap;
                             const multiDay = isoToDate(b.ends_at) !== day;
@@ -246,6 +252,13 @@ export default async function EventPage({
                                     </span>
                                   )}
                                   {b.note && <span className="text-sm text-muted">{b.note}</span>}
+                                  {(b.rig_minutes || b.strike_minutes) ? (
+                                    <span className="text-xs text-muted">
+                                      {b.rig_minutes ? `rigg från ${fmtTime(withRig(b).from)}` : ""}
+                                      {b.rig_minutes && b.strike_minutes ? " · " : ""}
+                                      {b.strike_minutes ? `riv till ${fmtTime(withRig(b).to)}` : ""}
+                                    </span>
+                                  ) : null}
                                   <span className="flex-1" />
                                   {booker && (
                                     <span className="flex items-center gap-1">
@@ -283,6 +296,18 @@ export default async function EventPage({
                                               <label className="label" htmlFor={`note-${b.id}`}>Notering</label>
                                               <input className="input" id={`note-${b.id}`} name="note" defaultValue={b.note ?? ""} />
                                             </div>
+                                            <div className="field">
+                                              <label className="label" htmlFor={`rig-${b.id}`}>Rigg före start</label>
+                                              <select className="input" id={`rig-${b.id}`} name="rig_minutes" defaultValue={b.rig_minutes ?? 0}>
+                                                {RIG_OPTIONS.map((m) => <option key={m} value={m}>{rigLabel(m)}</option>)}
+                                              </select>
+                                            </div>
+                                            <div className="field">
+                                              <label className="label" htmlFor={`strike-${b.id}`}>Riv efter slut</label>
+                                              <select className="input" id={`strike-${b.id}`} name="strike_minutes" defaultValue={b.strike_minutes ?? 0}>
+                                                {RIG_OPTIONS.map((m) => <option key={m} value={m}>{rigLabel(m)}</option>)}
+                                              </select>
+                                            </div>
                                           </div>
                                           <div><button className="btn btn-primary" type="submit">Spara</button></div>
                                         </form>
@@ -293,6 +318,15 @@ export default async function EventPage({
                                     </span>
                                   )}
                                 </div>
+                                {[...coBefore.map((c) => ({ c, other: c.event_id === id ? null : { id: c.event_id, title: c.event_title }, dir: "före" })),
+                                  ...coAfter.map((c) => ({ c, other: c.next_event_id === id ? null : { id: c.next_event_id, title: c.next_event_title }, dir: "efter" }))].map(({ c, other, dir }) => (
+                                  <span key={`${c.booking_id}-${c.next_booking_id}-${dir}`} className="text-xs text-st-preliminar pl-0 sm:pl-32">
+                                    Kort omställning {dir}
+                                    {other ? <> (<Link className="underline" href={`/evenemang/${other.id}`}>{other.title}</Link>)</> : ""}:{" "}
+                                    {fmtMinutes(c.gap_minutes)} emellan, behövs {fmtMinutes(c.needed_minutes)}
+                                    {c.setup_name || c.next_setup_name ? ` (${c.setup_name ?? "okänd"} → ${c.next_setup_name ?? "okänd"})` : ""}
+                                  </span>
+                                ))}
                                 {cs.map((c) => (
                                   <span key={c.other_booking_id} className="text-xs text-warn pl-0 sm:pl-32">
                                     Krockar med <Link className="underline" href={`/evenemang/${c.other_event_id}`}>{c.other_event_title}</Link> i{" "}

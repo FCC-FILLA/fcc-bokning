@@ -891,3 +891,26 @@ describe("möbleringsritningar", () => {
     });
   });
 });
+
+describe("omställning och rigg/riv", () => {
+  it("varnar när tiden mellan två bokningar i samma lokal är kortare än riv + omställning + rigg", async () => {
+    const a = await book("Omst A", "bekraftad", "Birka", "2028-02-01T09:00+01", "2028-02-01T12:00+01");
+    const b = await book("Omst B", "preliminar", "Birka", "2028-02-01T13:00+01", "2028-02-01T17:00+01");
+    await db.query("update bookings set setup_id = 'bio' where event_id = $1", [a]);
+    await db.query("update bookings set setup_id = 'runda' where event_id = $1", [b]);
+    const w = async () =>
+      (await db.query<{ gap_minutes: number; needed_minutes: number; event_title: string }>(
+        "select gap_minutes, needed_minutes, event_title from changeover_warnings where event_id = $1", [a])).rows;
+    // bio -> runda: 120 min, bara 60 min emellan.
+    expect(await w()).toEqual([{ gap_minutes: 60, needed_minutes: 120, event_title: "Omst A" }]);
+    // Eget par 45 min räcker.
+    await db.query("insert into setup_changeovers (from_setup, to_setup, minutes) values ('bio', 'runda', 45)");
+    expect(await w()).toEqual([]);
+    // Rigg på nästa bokning gör det för kort igen.
+    await db.query("update bookings set rig_minutes = 30 where event_id = $1", [b]);
+    expect((await w())[0].needed_minutes).toBe(75);
+    // Samma möblering och ingen rigg: ingen varning.
+    await db.query("update bookings set rig_minutes = 0, setup_id = 'bio' where event_id = $1", [b]);
+    expect(await w()).toEqual([]);
+  });
+});

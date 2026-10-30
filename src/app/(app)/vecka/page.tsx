@@ -5,8 +5,9 @@ import { TypeFilter } from "@/components/type-filter";
 import { canBook, getProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
-  addDays, dayShort, dayStartIso, fmtDayMonth, fmtTime, isoToDate, isoWeek, mondayOf, todayDate, weekday,
+  addDays, dayShort, dayStartIso, fmtDayMonth, fmtMinutes, fmtTime, isoToDate, isoWeek, mondayOf, todayDate, weekday,
 } from "@/lib/datum";
+import { withRig } from "@/lib/rigg";
 import { depthOf, makeOverlap } from "@/lib/lokaler";
 import { STATUS_LABEL, type EventStatus, type Room } from "@/lib/types";
 
@@ -18,6 +19,8 @@ type Row = {
   starts_at: string;
   ends_at: string;
   event_id: string;
+  rig_minutes: number;
+  strike_minutes: number;
   events: { title: string; status: EventStatus; event_type_id: string | null };
 };
 
@@ -43,9 +46,10 @@ export default async function SchedulePage({
     supabase.from("rooms").select("*").eq("active", true).eq("bookable", true).order("sort_order"),
     supabase
       .from("bookings")
-      .select("id, room_id, starts_at, ends_at, event_id, events!inner(title, status, event_type_id)")
-      .lt("starts_at", dayStartIso(addDays(monday, 7)))
-      .gt("ends_at", dayStartIso(monday))
+      .select("id, room_id, starts_at, ends_at, event_id, rig_minutes, strike_minutes, events!inner(title, status, event_type_id)")
+      // En dag extra åt båda hållen så att rigg och riv som går in i veckan kommer med.
+      .lt("starts_at", dayStartIso(addDays(monday, 8)))
+      .gt("ends_at", dayStartIso(addDays(monday, -1)))
       .order("starts_at"),
     showStaff
       ? supabase
@@ -68,6 +72,18 @@ export default async function SchedulePage({
   type OfferRow = { id: string; room_id: string; starts_at: string; ends_at: string; quote_id: string; quotes: { number: number; title: string; status: string } };
   const offers = showOffers ? ((offerData ?? []) as unknown as OfferRow[]) : [];
   const typeColor = new Map(types.map((t) => [t.id, t.color]));
+  // För kort omställning mellan bokningar den här veckan.
+  const { data: coData } = await supabase
+    .from("changeover_warnings")
+    .select("booking_id, next_booking_id, gap_minutes, needed_minutes, event_title, next_event_title")
+    .lt("ends_at", dayStartIso(addDays(monday, 7)))
+    .gt("next_starts_at", dayStartIso(monday));
+  const shortChange = new Map<string, string>();
+  for (const c of (coData ?? []) as { booking_id: string; next_booking_id: string; gap_minutes: number; needed_minutes: number; event_title: string; next_event_title: string }[]) {
+    const msg = `Kort omställning: ${fmtMinutes(c.gap_minutes)} mellan ${c.event_title} och ${c.next_event_title}, behövs ${fmtMinutes(c.needed_minutes)}`;
+    shortChange.set(c.booking_id, msg);
+    shortChange.set(c.next_booking_id, msg);
+  }
 
   const rooms = (roomData ?? []) as Room[];
   type ShiftRow = {
@@ -95,7 +111,16 @@ export default async function SchedulePage({
         clashing.add(a.id);
   const optionPlace = await loadOptionPlaces(supabase, active.filter((b) => b.events.status !== "bekraftad").map((b) => b.event_id));
 
-  const inDay = (b: Row, d: string) => b.starts_at < dayStartIso(addDays(d, 1)) && b.ends_at > dayStartIso(d);
+  const inDay = (b: { starts_at: string; ends_at: string }, d: string) => b.starts_at < dayStartIso(addDays(d, 1)) && b.ends_at > dayStartIso(d);
+  // Rigg och riv som egna block.
+  type RigBlock = { key: string; kind: "Rigg" | "Riv"; room_id: string; starts_at: string; ends_at: string; event_id: string; title: string };
+  const rigBlocks: RigBlock[] = visible.flatMap((b) => {
+    const w = withRig(b);
+    return [
+      ...(b.rig_minutes ? [{ key: `${b.id}-r`, kind: "Rigg" as const, room_id: b.room_id, starts_at: w.from, ends_at: b.starts_at, event_id: b.event_id, title: b.events.title }] : []),
+      ...(b.strike_minutes ? [{ key: `${b.id}-s`, kind: "Riv" as const, room_id: b.room_id, starts_at: b.ends_at, ends_at: w.to, event_id: b.event_id, title: b.events.title }] : []),
+    ];
+  });
   const timeLabel = (b: Row, d: string) => {
     const s = isoToDate(b.starts_at) < d ? "←" : fmtTime(b.starts_at);
     const endDay = isoToDate(b.ends_at);
@@ -141,6 +166,8 @@ export default async function SchedulePage({
         ))}
         <span>Randig ruta: lokalen blockeras av en bokning i hela salen eller en del av den.</span>
         <span className="text-warn">Röd ram: krock.</span>
+        <span className="text-st-preliminar">Gul ram: för kort omställning.</span>
+        <span>Randigt block: rigg eller riv.</span>
         <span>Färgad kant: evenemangstyp.</span>
         <span className="text-brand">Streckad: offererat, inte bokat.</span>
       </div>
@@ -183,6 +210,24 @@ export default async function SchedulePage({
                   </th>
                   {days.map((d) => {
                     const direct = visible.filter((b) => b.room_id === room.id && inDay(b, d));
+                    const rigs = rigBlocks.filter((x) => x.room_id === room.id && inDay(x, d));
+                    type CellItem = { at: string; node: React.ReactNode };
+                    const items: CellItem[] = [
+                      ...rigs.map((x) => ({
+                        at: x.starts_at,
+                        node: (
+                          <Link
+                            key={x.key}
+                            href={`/evenemang/${x.event_id}#bokningar`}
+                            title={`${x.kind} för ${x.title}`}
+                            className="pointer-events-auto block rounded-md border border-dashed border-line px-1.5 py-0.5 text-[11px] leading-tight text-muted"
+                            style={{ background: "repeating-linear-gradient(45deg, transparent 0 4px, var(--color-sunk) 4px 7px)" }}
+                          >
+                            <span className="font-mono">{fmtTime(x.starts_at)}–{fmtTime(x.ends_at)}</span> {x.kind}
+                          </Link>
+                        ),
+                      })),
+                    ];
                     const offered = offers.filter((o) => o.room_id === room.id && o.starts_at < dayStartIso(addDays(d, 1)) && o.ends_at > dayStartIso(d));
                     const via = active.filter((b) => b.room_id !== room.id && overlap(b.room_id, room.id) && inDay(b, d));
                     const viaNames = [...new Set(via.map((b) => roomName.get(b.room_id)))].join(", ");
@@ -202,14 +247,14 @@ export default async function SchedulePage({
                           />
                         )}
                         <div className="relative grid gap-1 pointer-events-none">
-                          {direct.map((b) => (
+                          {[...items, ...direct.map((b) => ({ at: b.starts_at, node: (
                             <Link
                               key={b.id}
                               href={`/evenemang/${b.event_id}`}
-                              title={`${b.events.title} · ${STATUS_LABEL[b.events.status]}${optionPlace.has(b.event_id) ? ` · ${optionOrdinal(optionPlace.get(b.event_id)!)} option` : ""}`}
+                              title={`${b.events.title} · ${STATUS_LABEL[b.events.status]}${optionPlace.has(b.event_id) ? ` · ${optionOrdinal(optionPlace.get(b.event_id)!)} option` : ""}${shortChange.has(b.id) ? `\n${shortChange.get(b.id)}` : ""}`}
                               className={`pointer-events-auto block rounded-md border-l-[3px] px-1.5 py-0.5 text-xs font-semibold leading-tight st-${b.events.status} ${
                                 b.events.status === "preliminar" ? "border-dashed" : ""
-                              } ${clashing.has(b.id) ? "ring-[1.5px] ring-warn ring-inset" : ""}`}
+                              } ${clashing.has(b.id) ? "ring-[1.5px] ring-warn ring-inset" : shortChange.has(b.id) ? "ring-[1.5px] ring-st-preliminar ring-inset" : ""}`}
                               style={b.events.event_type_id && typeColor.has(b.events.event_type_id) ? { borderLeftColor: typeColor.get(b.events.event_type_id) } : undefined}
                             >
                               <span className="block font-mono font-normal opacity-80">{timeLabel(b, d)}</span>
@@ -218,7 +263,7 @@ export default async function SchedulePage({
                                 {b.events.title}
                               </span>
                             </Link>
-                          ))}
+                          ) }))].sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0)).map((x) => x.node)}
                           {offered.map((o) => (
                             <Link
                               key={o.id}

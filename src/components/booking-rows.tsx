@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { RIG_OPTIONS, rigLabel } from "@/lib/rigg";
 
 type RoomOption = { id: string; name: string; depth: number; maxCap: number | null };
 type SetupOption = { id: string; name: string };
-type Row = { key: number; room_id: string; date: string; from: string; to: string; setup_id: string; note: string };
+type Row = { key: number; room_id: string; date: string; from: string; to: string; setup_id: string; note: string; rig: number; strike: number };
 
 let nextKey = 1;
 const blank = (date = "", room_id = "", from = "08:00", to = "17:00"): Row => ({
@@ -15,6 +16,8 @@ const blank = (date = "", room_id = "", from = "08:00", to = "17:00"): Row => ({
   to,
   setup_id: "",
   note: "",
+  rig: 0,
+  strike: 0,
 });
 
 /**
@@ -50,13 +53,13 @@ export function BookingRows({
   const add = () => setRows((rs) => [...rs, blank(rs.at(-1)?.date ?? defaultDate ?? "")]);
 
   const filled = rows.filter((r) => r.room_id && r.date && r.from && r.to);
-  const payload = JSON.stringify(filled.map(({ room_id, date, from, to, setup_id, note }) => ({ room_id, date, from, to, setup_id, note })));
+  const payload = JSON.stringify(filled.map(({ room_id, date, from, to, setup_id, note, rig, strike }) => ({ room_id, date, from, to, setup_id, note, rig_minutes: rig, strike_minutes: strike })));
 
   return (
     <div className="grid gap-3">
       <input type="hidden" name="rows" value={payload} />
       <div className="overflow-x-auto -mx-1 px-1">
-        <table className="w-full min-w-[820px] text-sm border-separate border-spacing-y-1.5">
+        <table className="w-full min-w-[980px] text-sm border-separate border-spacing-y-1.5">
           <thead>
             <tr className="text-left">
               <th className="label font-semibold pr-2">Lokal</th>
@@ -64,6 +67,8 @@ export function BookingRows({
               <th className="label font-semibold pr-2">Från</th>
               <th className="label font-semibold pr-2">Till</th>
               <th className="label font-semibold pr-2">Möblering</th>
+              <th className="label font-semibold pr-2" title="Tid före start för bygg, ljudcheck m.m. Blockerar lokalen.">Rigg</th>
+              <th className="label font-semibold pr-2" title="Tid efter slut för nedmontering. Blockerar lokalen.">Riv</th>
               <th className="label font-semibold pr-2">Notering</th>
               <th />
             </tr>
@@ -104,6 +109,16 @@ export function BookingRows({
                     {setups.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </td>
+                <td className="pr-2 w-[90px]">
+                  <select className="input" aria-label={`Rigg före rad ${i + 1}`} value={r.rig} onChange={(e) => update(r.key, { rig: Number(e.target.value) })}>
+                    {RIG_OPTIONS.map((m) => <option key={m} value={m}>{rigLabel(m)}</option>)}
+                  </select>
+                </td>
+                <td className="pr-2 w-[90px]">
+                  <select className="input" aria-label={`Riv efter rad ${i + 1}`} value={r.strike} onChange={(e) => update(r.key, { strike: Number(e.target.value) })}>
+                    {RIG_OPTIONS.map((m) => <option key={m} value={m}>{rigLabel(m)}</option>)}
+                  </select>
+                </td>
                 <td className="pr-2">
                   <input className="input" aria-label={`Notering rad ${i + 1}`} value={r.note} placeholder="T.ex. bygg" onChange={(e) => update(r.key, { note: e.target.value })} />
                 </td>
@@ -138,7 +153,8 @@ export function BookingRows({
         </span>
       </div>
       <p className="text-sm text-muted">
-        Ta med bygg och riv i tiderna. &quot;Kopiera&quot; gör en ny rad med samma dag och tid, så väljer du bara en annan lokal.
+        Från och till är själva evenemanget. Rigg och riv läggs till före och efter, blockerar lokalen och syns som egna block i kalendern.
+        &quot;Kopiera&quot; gör en ny rad med samma dag och tid, så väljer du bara en annan lokal.
       </p>
     </div>
   );

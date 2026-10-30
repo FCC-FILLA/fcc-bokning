@@ -72,6 +72,7 @@ const SETTINGS: Section = {
     { href: "/lokaler", label: "Lokaler" },
     { href: "/prislista", label: "Prislista" },
     { href: "/installningar/moblering", label: "Möbler och inventarier" },
+    { href: "/installningar/omstallning", label: "Omställning" },
     { href: "/installningar/evenemangstyper", label: "Evenemangstyper" },
     { href: "/installningar/bilder", label: "Bilder" },
     { href: "/installningar/offert", label: "Offert" },

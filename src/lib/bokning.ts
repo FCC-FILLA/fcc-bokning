@@ -8,6 +8,14 @@ export type BookingInputRow = {
   to: string; // HH:MM, före eller lika med "from" betyder nästa dag
   setup_id?: string | null;
   note?: string | null;
+  rig_minutes?: number;
+  strike_minutes?: number;
+};
+
+/** Minuter i rimligt intervall (0–48 h), annars 0. */
+export const minutes = (v: unknown) => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n > 0 ? Math.min(2880, n) : 0;
 };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,6 +41,8 @@ export function parseRows(json: string | null): { rows: BookingInputRow[]; error
       to: String(r.to ?? ""),
       setup_id: r.setup_id ? String(r.setup_id) : null,
       note: r.note ? String(r.note).trim().slice(0, 500) || null : null,
+      rig_minutes: minutes(r.rig_minutes),
+      strike_minutes: minutes(r.strike_minutes),
     };
     if (!UUID.test(row.room_id) || !DATE.test(row.date) || !TIME.test(row.from) || !TIME.test(row.to)) {
       return { rows: [], error: "Varje rad behöver lokal, datum, starttid och sluttid." };
@@ -57,6 +67,8 @@ export function expandRows(rows: BookingInputRow[], repeatWeeks: number, eventId
         ends_at: localToIso(`${endDate}T${r.to}`),
         setup_id: r.setup_id || null,
         note: r.note || null,
+        rig_minutes: r.rig_minutes ?? 0,
+        strike_minutes: r.strike_minutes ?? 0,
       });
     }
   }
