@@ -28,6 +28,7 @@ function parseTemplateRows(json: string | null): TemplateBooking[] {
         end_time: String(r.to),
         setup_id: r.setup_id ? String(r.setup_id) : null,
         note: r.note ? String(r.note).slice(0, 500) : null,
+        phase: ["bygg", "genomforande", "riv"].includes(String(r.phase)) ? String(r.phase) : "genomforande",
       }));
   } catch {
     return [];
@@ -171,7 +172,7 @@ export async function saveEventAsTemplate(eventId: string, fd: FormData) {
   const supabase = await createClient();
   const [{ data: ev }, { data: bookings }, { data: quote }] = await Promise.all([
     supabase.from("events").select("*").eq("id", eventId).single(),
-    supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note").eq("event_id", eventId).order("starts_at").limit(200),
+    supabase.from("bookings").select("room_id, starts_at, ends_at, setup_id, note, phase").eq("event_id", eventId).order("starts_at").limit(1000),
     supabase.from("quotes").select("id").eq("event_id", eventId).order("updated_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (!ev) redirect("/evenemang");

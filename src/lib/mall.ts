@@ -8,6 +8,7 @@ export type TemplateBooking = {
   end_time: string;
   setup_id: string | null;
   note: string | null;
+  phase?: string | null;
 };
 
 /** Mallens lokaler och tider blir riktiga bokningar från ett startdatum (dag 1 = startdatumet). */
@@ -23,13 +24,14 @@ export function bookingsFromTemplate(rows: TemplateBooking[], startDate: string,
       ends_at: localToIso(`${to <= from ? addDays(d, 1) : d}T${to}`),
       setup_id: r.setup_id,
       note: r.note,
+      phase: r.phase ?? "genomforande",
     };
   });
 }
 
 /** Ett evenemangs bokningar blir mallrader, räknat i dagar från första bokningen. */
 export function templateFromBookings(
-  bookings: { room_id: string; starts_at: string; ends_at: string; setup_id: string | null; note: string | null }[],
+  bookings: { room_id: string; starts_at: string; ends_at: string; setup_id: string | null; note: string | null; phase?: string | null }[],
 ): TemplateBooking[] {
   if (!bookings.length) return [];
   const first = isoToDate([...bookings].sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0].starts_at);
@@ -40,5 +42,6 @@ export function templateFromBookings(
     end_time: isoToLocal(b.ends_at).slice(11),
     setup_id: b.setup_id,
     note: b.note,
+    phase: b.phase ?? "genomforande",
   }));
 }

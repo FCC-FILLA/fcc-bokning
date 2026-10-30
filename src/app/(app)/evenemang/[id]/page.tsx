@@ -18,6 +18,8 @@ import { EventPortalAdmin } from "@/components/event-portal-admin";
 import { EventLayouts } from "@/components/event-layouts";
 import { EventTabs } from "@/components/event-tabs";
 import { EventInvoicing } from "@/components/event-invoicing";
+import { BookingMatrix, BookingSeriesList, PROGRAM_VIEWS, ProgramSummary, ProgramViewSwitch, type ProgramView } from "@/components/event-program";
+import { PHASES, PHASE_LABEL, isPhase } from "@/lib/serier";
 import { saveEventAsTemplate } from "../../mallar/actions";
 import {
   addBookings, copyDay, deleteBooking, deleteEvent, duplicateEvent, moveOption, updateBooking, updateEvent,
@@ -32,7 +34,7 @@ export default async function EventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string; vy?: string; borttaget?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -56,6 +58,7 @@ export default async function EventPage({
 
   const now = new Date().toISOString();
   const allBookings = (bookingData ?? []) as Booking[];
+  const view: ProgramView = PROGRAM_VIEWS.some((v) => v.id === sp.vy) ? (sp.vy as ProgramView) : "matris";
   const showPast = sp.tidigare === "1";
   const pastCount = allBookings.filter((b) => b.ends_at < now).length;
   const bookings = showPast ? allBookings : allBookings.filter((b) => b.ends_at >= now);
@@ -101,7 +104,8 @@ export default async function EventPage({
 
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
       {sp.sparat && <Ok>Evenemanget är sparat.</Ok>}
-      {sp.andrat && <Ok>Bokningen är ändrad.</Ok>}
+      {sp.andrat && <Ok>{sp.andrat === "1" ? "Bokningen är ändrad." : `${sp.andrat} bokningar är ändrade.`}</Ok>}
+      {sp.borttaget && <Ok>{sp.borttaget} bokning{sp.borttaget === "1" ? "" : "ar"} har tagits bort.</Ok>}
       {sp.kopierad && <Ok>Kopian är skapad med status Förfrågan. Byt gärna namn och kontrollera tiderna.</Ok>}
       {sp.franmall && <Ok>Evenemanget är skapat från mallen. Kontrollera krockar, kund och tider.</Ok>}
       {sp.tillagt && <Ok>{sp.tillagt} bokning{sp.tillagt === "1" ? "" : "ar"} har lagts till.</Ok>}
@@ -196,14 +200,21 @@ export default async function EventPage({
                   <h2 className="text-lg font-semibold">Bokningar</h2>
                   <span className="text-sm text-muted">{allBookings.length} totalt</span>
                   <span className="flex-1" />
-                  {pastCount > 0 && (
-                    <Link className="text-sm text-muted underline-offset-2 hover:underline" href={`/evenemang/${id}${showPast ? "" : "?tidigare=1"}#bokningar`}>
+                  {allBookings.length > 0 && <ProgramViewSwitch eventId={id} view={view} />}
+                  {view === "lista" && pastCount > 0 && (
+                    <Link className="text-sm text-muted underline-offset-2 hover:underline" href={`/evenemang/${id}?vy=lista${showPast ? "" : "&tidigare=1"}#bokningar`}>
                       {showPast ? "Dölj tidigare" : `Visa tidigare (${pastCount})`}
                     </Link>
                   )}
                 </div>
 
-                {bookings.length === 0 ? (
+                {allBookings.length > 0 && <ProgramSummary bookings={allBookings} conflicts={conflicts} />}
+
+                {view === "matris" && allBookings.length > 0 ? (
+                  <BookingMatrix eventId={id} bookings={allBookings} conflicts={conflicts} lookups={lookups} />
+                ) : view === "serier" && allBookings.length > 0 ? (
+                  <BookingSeriesList eventId={id} bookings={allBookings} conflicts={conflicts} lookups={lookups} booker={booker} />
+                ) : bookings.length === 0 ? (
                   <p className="text-sm text-muted">Inga {pastCount ? "kommande " : ""}bokningar. Lägg till lokaler och tider nedan.</p>
                 ) : (
                   <div className="grid gap-4">
@@ -233,13 +244,14 @@ export default async function EventPage({
                             const over = cap != null && ev.participants != null && ev.participants > cap;
                             const multiDay = isoToDate(b.ends_at) !== day;
                             return (
-                              <li key={b.id} className={`relative grid gap-1 rounded-md px-2 py-2 ${cs.length ? "bg-warn-soft/60" : "hover:bg-sunk/50"}`}>
+                              <li key={b.id} id={`b-${b.id}`} className={`relative grid gap-1 rounded-md px-2 py-2 scroll-mt-28 target:ring-2 target:ring-brand ${cs.length ? "bg-warn-soft/60" : "hover:bg-sunk/50"}`}>
                                 <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
                                   <span className="font-mono text-sm w-28 shrink-0">
                                     {fmtTime(b.starts_at)}–{fmtTime(b.ends_at)}
                                     {multiDay && <span className="text-xs text-muted"> +{daysBetween(day, isoToDate(b.ends_at))}d</span>}
                                   </span>
                                   <span className="font-semibold min-w-0">{roomName.get(b.room_id) ?? "Okänd lokal"}</span>
+                                  {isPhase(b.phase) && b.phase !== "genomforande" && <span className={`pill ph-${b.phase}`}>{PHASE_LABEL[b.phase]}</span>}
                                   {b.setup_id && (
                                     <span className={`text-sm ${over ? "text-warn" : "text-muted"}`}>
                                       {setupName.get(b.setup_id)}{cap != null ? `, max ${cap}` : ""}{over ? ` (${ev.participants} deltagare)` : ""}
@@ -271,6 +283,12 @@ export default async function EventPage({
                                             <div className="field">
                                               <label className="label" htmlFor={`e-${b.id}`}>Slut</label>
                                               <input className="input" id={`e-${b.id}`} name="ends_at" type="datetime-local" step={900} defaultValue={isoToLocal(b.ends_at)} required />
+                                            </div>
+                                            <div className="field">
+                                              <label className="label" htmlFor={`ph-${b.id}`}>Fas</label>
+                                              <select className="input" id={`ph-${b.id}`} name="phase" defaultValue={isPhase(b.phase) ? b.phase : "genomforande"}>
+                                                {PHASES.map((p) => <option key={p} value={p}>{PHASE_LABEL[p]}</option>)}
+                                              </select>
                                             </div>
                                             <div className="field">
                                               <label className="label" htmlFor={`setup-${b.id}`}>Möblering</label>
@@ -313,6 +331,12 @@ export default async function EventPage({
                     <summary className="cursor-pointer font-semibold">Lägg till bokningar</summary>
                     <form action={addBookings.bind(null, id)} className="mt-4 grid gap-4">
                       <BookingFields lookups={lookups} defaultDate={firstDate ?? undefined} />
+                      <div className="field max-w-xs">
+                        <label className="label" htmlFor="add-phase">Fas för raderna</label>
+                        <select className="input" id="add-phase" name="phase" defaultValue="genomforande">
+                          {PHASES.map((p) => <option key={p} value={p}>{PHASE_LABEL[p]}</option>)}
+                        </select>
+                      </div>
                       <div><button className="btn btn-primary" type="submit">Lägg till</button></div>
                     </form>
                   </details>

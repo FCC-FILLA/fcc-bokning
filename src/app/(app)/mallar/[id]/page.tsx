@@ -140,6 +140,7 @@ export default async function TemplatePage({
               to: String(r.end_time).slice(0, 5),
               setup_id: (r.setup_id as string) ?? "",
               note: (r.note as string) ?? "",
+              phase: (r.phase as string) ?? "genomforande",
             }))}
           />
         </section>

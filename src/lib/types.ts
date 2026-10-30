@@ -107,6 +107,7 @@ export type Booking = {
   ends_at: string;
   setup_id: string | null;
   note: string | null;
+  phase?: string | null;
 };
 
 export type BookingConflict = {
