@@ -69,6 +69,13 @@ export default async function SettingsPage() {
       facts: company.orgnr ? [company.legal_name] : ["organisationsnummer saknas"],
     },
     {
+      href: "/installningar/skarm",
+      title: "Kontorsskärm",
+      text: "Länk till en helskärmsvy med dagens och veckans evenemang, för en TV på kontoret.",
+      icon: "clock",
+      facts: [],
+    },
+    {
       href: "/anvandare",
       title: "Användare och roller",
       text: "Vem som har tillgång, vilken roll de har och vem som är avstängd.",
