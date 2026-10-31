@@ -104,7 +104,8 @@ export type Camera =
   | { kind: "mjpeg"; src: string }
   | { kind: "snapshot"; src: string }
   | { kind: "video"; src: string }
-  | { kind: "iframe"; src: string };
+  | { kind: "iframe"; src: string }
+  | { kind: "unifi"; src: string };
 
 /** Vad för slags kameralänk det är, och hur den ska visas. */
 export function cameraOf(url: string | undefined): Camera {
@@ -126,9 +127,26 @@ export function cameraOf(url: string | undefined): Camera {
     null;
   if (yt) return { kind: "iframe", src: `https://www.youtube.com/embed/${yt}?autoplay=1&mute=1&controls=0&playsinline=1` };
 
+  // UniFi Protects delningssida: videon visas beskuren utan sidans ram, se UNIFI_FRAME.
+  if (host === "monitor.ui.com") return { kind: "unifi", src: raw };
   if (path.endsWith(".m3u8")) return { kind: "hls", src: raw };
   if (/\.(mp4|webm)$/.test(path)) return { kind: "video", src: raw };
   if (/mjpe?g|video\.cgi|mjpg\.cgi/.test(path) || u.searchParams.get("action") === "stream") return { kind: "mjpeg", src: raw };
   if (/\.(jpe?g|png)$/.test(path) || /snapshot|snap\.|image\.cgi|jpg\/image/.test(path)) return { kind: "snapshot", src: raw };
   return { kind: "iframe", src: raw };
+}
+
+/**
+ * UniFi-delningssidan ritad i en fast storlek, och var videon hamnar på den (uppmätt i webbläsaren).
+ * Skärmen skalar upp rutan så att bara videon syns. Ändrar Ubiquiti sidans layout måste måtten mätas om.
+ */
+export const UNIFI_FRAME = { width: 800, height: 600, video: { x: 108, y: 124, width: 584, height: 328 } };
+
+/** Skala och förskjutning så att videodelen fyller en ruta på w × h pixlar (fyller hela, beskär hellre än lämnar kant). */
+export function unifiCrop(w: number, h: number) {
+  const v = UNIFI_FRAME.video;
+  const scale = Math.max(w / v.width, h / v.height);
+  const x = (w - v.width * scale) / 2 - v.x * scale;
+  const y = (h - v.height * scale) / 2 - v.y * scale;
+  return { scale, x, y };
 }

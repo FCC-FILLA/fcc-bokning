@@ -14,6 +14,7 @@ const CAMERA_KIND: Record<string, string> = {
   snapshot: "Stillbild som uppdateras varannan sekund",
   video: "Videofil",
   iframe: "Inbäddad sida (t.ex. YouTube eller kamerans webbsida)",
+  unifi: "Delningslänk från UniFi Protect (visas beskuren utan UniFi:s ram). Gäller i 24 timmar och kan bara visas på en skärm i taget",
 };
 
 export default async function LogeSettingsPage({ searchParams }: { searchParams: Promise<{ ny?: string; sparad?: string; fel?: string }> }) {

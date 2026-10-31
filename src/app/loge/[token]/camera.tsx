@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import type { Camera } from "@/lib/loge";
+import { UNIFI_FRAME, unifiCrop, type Camera } from "@/lib/loge";
 
 /** Kamerabilden från scenen. Klarar HLS (.m3u8), MJPEG, stillbilder som uppdateras, mp4 och vanliga inbäddningssidor. */
 // memo: skärmens klocka renderar om varje sekund, men strömmen ska inte startas om.
@@ -17,6 +17,7 @@ export const CameraView = memo(function CameraView({ camera, offText }: { camera
   }, [failed]);
 
   if (camera.kind === "none" || failed) return <div className="loge-cam-off">{offText}</div>;
+  if (camera.kind === "unifi") return <UnifiFrame src={camera.src} />;
   if (camera.kind === "iframe")
     return <iframe className="loge-cam-media" src={camera.src} title="Kamera" allow="autoplay; fullscreen; encrypted-media" referrerPolicy="no-referrer" />;
   if (camera.kind === "mjpeg")
@@ -70,4 +71,34 @@ function Video({ camera, onFail }: { camera: Extract<Camera, { kind: "hls" | "vi
     };
   }, [camera, onFail]);
   return <video ref={ref} className="loge-cam-media" muted autoPlay playsInline loop={camera.kind === "video"} onError={camera.kind === "video" ? onFail : undefined} />;
+}
+
+/** UniFi-delningssidan i fast storlek, uppskalad och förskjuten så att bara videon syns i rutan. */
+function UnifiFrame({ src }: { src: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [t, setT] = useState<{ scale: number; x: number; y: number } | null>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setT(unifiCrop(el.clientWidth, el.clientHeight)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={box} className="loge-cam-media loge-cam-crop">
+      <iframe
+        src={src}
+        title="Kamera"
+        allow="autoplay; fullscreen; encrypted-media"
+        referrerPolicy="no-referrer"
+        tabIndex={-1}
+        style={{
+          width: UNIFI_FRAME.width,
+          height: UNIFI_FRAME.height,
+          transform: t ? `translate(${t.x}px, ${t.y}px) scale(${t.scale})` : undefined,
+          visibility: t ? "visible" : "hidden",
+        }}
+      />
+    </div>
+  );
 }

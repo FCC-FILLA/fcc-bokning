@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cameraOf, nowNext, parseInfo, parseLang, pickEvent, type LogeEvent, type LogeRunItem } from "@/lib/loge";
+import { cameraOf, unifiCrop, UNIFI_FRAME, nowNext, parseInfo, parseLang, pickEvent, type LogeEvent, type LogeRunItem } from "@/lib/loge";
 
 const item = (starts_at: string, title: string, duration_minutes: number | null = null): LogeRunItem => ({
   starts_at, title, duration_minutes, who: null, room: null, room_en: null,
@@ -23,6 +23,16 @@ describe("logeskärm", () => {
     expect(cameraOf("https://youtu.be/abc123").kind).toBe("iframe");
     expect(cameraOf("https://www.youtube.com/live/xyz?si=1")).toMatchObject({ src: expect.stringContaining("/embed/xyz?") });
     expect(cameraOf("https://player.example.se/scen")).toEqual({ kind: "iframe", src: "https://player.example.se/scen" });
+  });
+
+  it("beskär UniFi-delningssidan så att videon fyller rutan", () => {
+    expect(cameraOf("https://monitor.ui.com/abc").kind).toBe("unifi");
+    const v = UNIFI_FRAME.video;
+    const c = unifiCrop(1168, 657);
+    expect(c.scale).toBeCloseTo(2, 1);
+    // Videons vänstra och övre kant hamnar i rutans hörn (inom en pixel).
+    expect(Math.abs(c.x + v.x * c.scale)).toBeLessThan(2);
+    expect(Math.abs(c.y + v.y * c.scale)).toBeLessThan(2);
   });
 
   it("delar upp infotexten i rubriker och punkter", () => {
