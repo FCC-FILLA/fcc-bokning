@@ -4,7 +4,7 @@ import { MONTHS, pct, summarize, type Stats } from "@/lib/statistik";
 /** Statistiken för ett år som Excel (för styrelsen). */
 export async function buildStatsWorkbook(s: Stats) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "FCC Bokning";
+  wb.creator = "FCC Venue Management";
   wb.created = new Date();
   const brand = "FF60272B";
   const header = (row: ExcelJS.Row) => {

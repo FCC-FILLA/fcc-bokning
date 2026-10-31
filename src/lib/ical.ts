@@ -38,7 +38,7 @@ export function buildCalendar(name: string, events: IcsEvent[], now = new Date()
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Filadelfia Convention Center//FCC Bokning//SV",
+    "PRODID:-//Filadelfia Convention Center//FCC Venue Management//SV",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${escapeText(name)}`,

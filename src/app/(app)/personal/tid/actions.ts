@@ -95,7 +95,7 @@ async function queuePayrollMail(month: string, who: string) {
   await supabase.from("email_outbox").insert({
     to_email: to,
     subject: `Löneunderlag ${monthLabel(month)}`,
-    body: `Hej!\n\nHär kommer löneunderlag för ${monthLabel(month)}: ${summary.shifts} attesterade pass, ${summary.hours.toLocaleString("sv-SE")} timmar.\n\nExcel-filen är bifogad i lönesystemets importformat (timlön och OB per person). Månaden låstes av ${who}.\n\nFCC Bokning`,
+    body: `Hej!\n\nHär kommer löneunderlag för ${monthLabel(month)}: ${summary.shifts} attesterade pass, ${summary.hours.toLocaleString("sv-SE")} timmar.\n\nExcel-filen är bifogad i lönesystemets importformat (timlön och OB per person). Månaden låstes av ${who}.\n\nFCC Venue Management`,
     kind: "lon",
     attachment_path: path,
     attachment_name: name,

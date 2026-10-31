@@ -201,7 +201,7 @@ export function Board({ feed }: { feed: ScreenFeed }) {
             </div>
           ))}
         </div>
-        <p className="skarm-src">Från FCC Bokning · hämtad {fmtTime(feed.now)} · uppdateras var femte minut</p>
+        <p className="skarm-src">Från FCC Venue Management · hämtad {fmtTime(feed.now)} · uppdateras var femte minut</p>
       </footer>
     </div>
   );

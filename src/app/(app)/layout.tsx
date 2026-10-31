@@ -52,10 +52,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="bg-brand text-white sticky top-0 z-20 print:hidden">
         <div className="mx-auto max-w-[1500px] px-4 pt-3 pb-2 grid gap-2">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <Link href="/" className="flex items-center gap-3" aria-label="FCC Bokning, till översikten">
+            <Link href="/" className="flex items-center gap-3" aria-label="FCC Venue Management, till översikten">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/brand/fcc-logo-white.svg" alt="Filadelfia Convention Center" width={127} height={32} className="h-8 w-auto" />
-              <span className="border-l border-white/30 pl-3 font-display text-lg tracking-wide opacity-85">Bokning</span>
+              <span className="border-l border-white/30 pl-3 font-display text-lg tracking-wide opacity-85">Venue Management</span>
             </Link>
             <form action="/sok" method="get" className="flex-1 min-w-48 max-w-md" role="search">
               <input

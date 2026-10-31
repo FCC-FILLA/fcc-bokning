@@ -19,12 +19,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   }[];
   if (!rows.length) {
     // Ogiltig nyckel och tom kalender ser likadana ut utåt.
-    return new NextResponse(buildCalendar("FCC Bokning", []), { headers: { "Content-Type": "text/calendar; charset=utf-8" } });
+    return new NextResponse(buildCalendar("FCC Venue Management", []), { headers: { "Content-Type": "text/calendar; charset=utf-8" } });
   }
 
   const origin = new URL(req.url).origin;
   const ics = buildCalendar(
-    "FCC Bokning",
+    "FCC Venue Management",
     rows.map((r) => ({
       uid: `${r.booking_id}@fcc-bokning`,
       start: r.starts_at,

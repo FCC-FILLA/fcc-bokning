@@ -4,7 +4,7 @@ import "@fontsource-variable/source-sans-3";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: { default: "FCC Bokning", template: "%s · FCC Bokning" },
+  title: { default: "FCC Venue Management", template: "%s · FCC Venue Management" },
   description: "Internt bokningssystem för Filadelfia Convention Center",
 };
 

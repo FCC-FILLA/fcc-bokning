@@ -10,7 +10,7 @@ export async function buildMonthWorkbook(supabase: SupabaseClient, month: string
   const { rows, period } = await loadMonth(supabase, month);
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "FCC Bokning";
+  wb.creator = "FCC Venue Management";
   wb.created = new Date();
   const brand = "FF60272B";
 
@@ -122,7 +122,7 @@ export async function buildPayrollWorkbook(supabase: SupabaseClient, month: stri
   }
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "FCC Bokning";
+  wb.creator = "FCC Venue Management";
   wb.created = new Date();
   const ws = wb.addWorksheet("1");
   ws.properties.defaultColWidth = 15;

@@ -126,8 +126,8 @@ export async function sendTestMail() {
   await supabase.from("email_outbox").insert({
     to_email: me.email,
     to_name: me.full_name || null,
-    subject: "Testmejl från FCC Bokning",
-    body: "Hej!\n\nOm du läser det här fungerar e-posten från FCC Bokning.",
+    subject: "Testmejl från FCC Venue Management",
+    body: "Hej!\n\nOm du läser det här fungerar e-posten från FCC Venue Management.",
     kind: "test",
   });
   await kickMail();

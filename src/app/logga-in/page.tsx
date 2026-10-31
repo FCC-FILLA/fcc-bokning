@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="grid gap-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/fcc-logo-black.svg" alt="Filadelfia Convention Center" width={240} height={61} className="h-auto w-60" />
-          <h1 className="text-3xl font-semibold text-brand">Bokning</h1>
+          <h1 className="text-3xl font-semibold text-brand">Venue Management</h1>
         </div>
         <LinkSession />
         <form action={signIn} className="card p-6 grid gap-4">
