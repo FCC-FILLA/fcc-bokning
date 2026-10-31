@@ -5,7 +5,7 @@ import { parseLang, type LogeFeed } from "@/lib/loge";
 import { LogeBoard } from "./board";
 import "../loge.css";
 
-// Logeskärm: /loge/<hemlig nyckel>?sprak=sv|en|vaxla. Öppen utan inloggning, nyckeln byts under Inställningar → Logeskärm.
+// Logeskärm: /loge/<hemlig nyckel>?sprak=sv|en|vaxla. Öppen utan inloggning, nyckeln byts under Skärmar → Logeskärm.
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Loge", robots: { index: false, follow: false } };
 

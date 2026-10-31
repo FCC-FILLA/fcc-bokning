@@ -5,7 +5,7 @@ import type { ScreenFeed } from "@/lib/skarm";
 import { Board } from "./board";
 import "../skarm.css";
 
-// Kontorsskärm: /skarm/<hemlig nyckel>. Öppen utan inloggning, nyckeln byts under Inställningar → Kontorsskärm.
+// Kontorsskärm: /skarm/<hemlig nyckel>. Öppen utan inloggning, nyckeln byts under Skärmar → Kontorsskärm.
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Kontorsskärm", robots: { index: false, follow: false } };
 
