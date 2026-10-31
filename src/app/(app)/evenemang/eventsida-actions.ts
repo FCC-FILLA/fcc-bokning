@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { canBook, canManageStaff, requireProfile } from "@/lib/auth";
 import { addDays, isoToDate } from "@/lib/datum";
 import { kickMail } from "@/lib/epost";
+import { ensureEventFolder } from "@/lib/projektmapp";
 import { createClient } from "@/lib/supabase/server";
 
 async function requireEditor() {
@@ -147,4 +148,13 @@ export async function setChecklistAssignee(eventId: string, itemId: string, fd: 
   const supabase = await createClient();
   await supabase.from("event_checklist").update({ assignee_id: /^[0-9a-f-]{36}$/i.test(a) ? a : null }).eq("id", itemId);
   done(eventId);
+}
+
+/** Skapar (eller hittar) evenemangets projektmapp i Google Drive. */
+export async function createProjectFolder(eventId: string) {
+  await requireEditor();
+  const supabase = await createClient();
+  const res = await ensureEventFolder(supabase, eventId);
+  revalidatePath(`/evenemang/${eventId}`);
+  redirect(`/evenemang/${eventId}?${"error" in res ? `fel=${encodeURIComponent(res.error)}` : "mapp=1"}#genomforande`);
 }

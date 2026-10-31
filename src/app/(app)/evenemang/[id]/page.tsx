@@ -37,7 +37,7 @@ export default async function EventPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string; vy?: string; borttaget?: string; optionskickad?: string }>;
+  searchParams: Promise<{ fel?: string; sparat?: string; tillagt?: string; tidigare?: string; andrat?: string; kopierad?: string; franmall?: string; passskapat?: string; skickad?: string; vy?: string; borttaget?: string; optionskickad?: string; mapp?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -131,6 +131,7 @@ export default async function EventPage({
 
       {sp.fel && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">{sp.fel}</p>}
       {sp.sparat && <Ok>Evenemanget är sparat.</Ok>}
+      {sp.mapp && <Ok>Projektmappen finns i Google Drive. Länken ligger under Genomförande → Dokument.</Ok>}
       {sp.andrat && <Ok>{sp.andrat === "1" ? "Bokningen är ändrad." : `${sp.andrat} bokningar är ändrade.`}</Ok>}
       {sp.borttaget && <Ok>{sp.borttaget} bokning{sp.borttaget === "1" ? "" : "ar"} har tagits bort.</Ok>}
       {sp.kopierad && <Ok>Kopian är skapad med status Förfrågan. Byt gärna namn och kontrollera tiderna.</Ok>}

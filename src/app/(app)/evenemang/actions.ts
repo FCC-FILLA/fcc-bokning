@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { driveConfigured } from "@/lib/drive";
+import { ensureEventFolder } from "@/lib/projektmapp";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireBooker } from "@/lib/auth";
@@ -107,7 +110,12 @@ export async function updateEvent(id: string, fd: FormData) {
   const parsed = readEvent(fd);
   if (!parsed.success) redirect(`/evenemang/${id}?fel=${encodeURIComponent(parsed.error.issues[0].message)}`);
   const supabase = await createClient();
+  const { data: before } = await supabase.from("events").select("status, drive_folder_id").eq("id", id).maybeSingle();
   const { error } = await supabase.from("events").update(parsed.data).eq("id", id);
+  // Projektmapp i Drive skapas när evenemanget blir bekräftat (efter svaret, så att sparandet inte väntar på Google).
+  if (!error && parsed.data.status === "bekraftad" && before?.status !== "bekraftad" && !before?.drive_folder_id && driveConfigured()) {
+    after(async () => { await ensureEventFolder(supabase, id); });
+  }
   revalidatePath("/", "layout");
   redirect(`/evenemang/${id}?${error ? `fel=${encodeURIComponent("Det gick inte att spara.")}` : "sparat=1"}`);
 }

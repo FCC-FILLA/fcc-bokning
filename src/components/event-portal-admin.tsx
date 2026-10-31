@@ -1,9 +1,10 @@
 import { canBook, canManageStaff, getProfile } from "@/lib/auth";
 import { fmtDate } from "@/lib/datum";
+import { driveConfigured, folderUrl } from "@/lib/drive";
 import { createClient } from "@/lib/supabase/server";
 import {
   addChecklistItem, addDefaultChecklist, deleteChecklistItem, deleteDocument, registerDocument, sendPortalLink, setDocumentFlag,
-  setChecklistAssignee, setPortalEnabled, toggleChecklistItem,
+  setChecklistAssignee, setPortalEnabled, toggleChecklistItem, createProjectFolder,
 } from "@/app/(app)/evenemang/eventsida-actions";
 import { CopyButton } from "@/components/copy-button";
 import { DocumentUpload } from "@/components/document-upload";
@@ -19,7 +20,7 @@ export async function EventPortalAdmin({ eventId, sent, error }: { eventId: stri
   const editor = canBook(p) || canManageStaff(p);
   const supabase = await createClient();
   const [{ data: ev }, { data: items }, { data: docs }, { data: site }, { data: people }] = await Promise.all([
-    supabase.from("events").select("share_token, portal_enabled, status, contacts(email), companies(email)").eq("id", eventId).single(),
+    supabase.from("events").select("share_token, portal_enabled, status, drive_folder_id, contacts(email), companies(email)").eq("id", eventId).single(),
     supabase.from("event_checklist").select("*").eq("event_id", eventId).order("due_date", { nullsFirst: false }).order("sort_order"),
     supabase.from("event_documents").select("id, name, size_bytes, public, staff, created_at").eq("event_id", eventId).order("created_at", { ascending: false }),
     supabase.from("app_settings").select("value").eq("key", "site_url").maybeSingle(),
@@ -28,7 +29,7 @@ export async function EventPortalAdmin({ eventId, sent, error }: { eventId: stri
   const staffList = (people ?? []) as { id: string; full_name: string | null; email: string }[];
   const personName = new Map(staffList.map((x) => [x.id, x.full_name || x.email]));
   if (!ev) return null;
-  const e = ev as unknown as { share_token: string; portal_enabled: boolean; status: string; contacts: { email: string | null } | null; companies: { email: string | null } | null };
+  const e = ev as unknown as { drive_folder_id: string | null; share_token: string; portal_enabled: boolean; status: string; contacts: { email: string | null } | null; companies: { email: string | null } | null };
   const active = e.portal_enabled || e.status === "bekraftad" || e.status === "genomford";
   const url = `${site?.value ?? "https://fcc-bokning.vercel.app"}/event/${e.share_token}`;
   const list = (items ?? []) as Item[];
@@ -148,7 +149,17 @@ export async function EventPortalAdmin({ eventId, sent, error }: { eventId: stri
       <div className="grid gap-2 border-t border-line pt-4">
         <div className="flex flex-wrap items-center gap-3">
           <h3 className="font-semibold">Dokument</h3>
-          <span className="text-xs text-muted">Nya dokument är dolda för kunden. Projektmappen i Google Drive kopplas in senare.</span>
+          <span className="text-xs text-muted">Nya dokument är dolda för kunden.</span>
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            {e.drive_folder_id && (
+              <a className="btn" href={folderUrl(e.drive_folder_id)} target="_blank" rel="noreferrer">Projektmapp i Drive ↗</a>
+            )}
+            {editor && (!e.drive_folder_id || !driveConfigured()) && (
+              <form action={createProjectFolder.bind(null, eventId)}>
+                <button className="btn btn-ghost" type="submit" title={driveConfigured() ? "Kund / år / datum och namn" : "Google Drive är inte kopplat än"}>Skapa projektmapp</button>
+              </form>
+            )}
+          </span>
         </div>
         {documents.length > 0 && (
           <ul className="divide-y divide-line rounded-lg border border-line">
