@@ -75,7 +75,8 @@ export default async function LogeSettingsPage({ searchParams }: { searchParams:
             <input className="input" id="loge_camera_url" name="loge_camera_url" type="url" defaultValue={s.loge_camera_url ?? ""} placeholder="https://…" autoComplete="off" />
             <span className="text-xs text-muted">
               Länk till en HLS-ström (.m3u8), en MJPEG-ström eller stillbild från kameran, en YouTube-sändning eller kamerans webbsida.
-              Lämna tomt för att visa skärmen utan kamera.
+              Lämna tomt för att visa skärmen utan kamera. En RTSP-länk (t.ex. från UniFi Protect) går inte att visa direkt i en
+              webbläsare: kör den genom en omvandlare som go2rtc på husets nät och klistra in omvandlarens https-länk här.
               {camera.kind !== "none" && <> Tolkas som: <b>{CAMERA_KIND[camera.kind]}</b>.</>}
             </span>
             {insecure && (

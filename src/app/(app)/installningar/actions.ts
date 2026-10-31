@@ -153,6 +153,9 @@ const LOGE_FIELDS = ["loge_camera_url", "loge_wifi_name", "loge_wifi_password", 
 export async function saveLogeSettings(fd: FormData) {
   if (!isAdmin(await requireProfile())) redirect("/installningar/loge?fel=" + encodeURIComponent("Bara administratörer kan ändra logeskärmen."));
   const camera = String(fd.get("loge_camera_url") ?? "").trim();
+  if (/^rtsps?:\/\//i.test(camera)) {
+    redirect("/installningar/loge?fel=" + encodeURIComponent("RTSP-länkar kan inte visas i en webbläsare. Klistra in länken från omvandlaren (t.ex. go2rtc) i stället, se beskrivningen under fältet."));
+  }
   if (camera && !/^https?:\/\/\S+$/i.test(camera)) {
     redirect("/installningar/loge?fel=" + encodeURIComponent("Kameralänken måste börja med https:// (eller http://)."));
   }
