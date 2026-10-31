@@ -80,6 +80,13 @@ export default async function SettingsPage() {
       facts: [],
     },
     {
+      href: "/installningar/loge",
+      title: "Logeskärm",
+      text: "Skärm i artisternas loger: dagens schema, kamera från scenen, Wi-Fi och praktisk info på svenska och engelska.",
+      icon: "stage",
+      facts: [],
+    },
+    {
       href: "/anvandare",
       title: "Användare och roller",
       text: "Vem som har tillgång, vilken roll de har och vem som är avstängd.",

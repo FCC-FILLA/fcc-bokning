@@ -94,6 +94,7 @@ const SETTINGS: Section = {
     { href: "/installningar/foretag", label: "Företagsuppgifter" },
     { href: "/installningar/epost", label: "E-post" },
     { href: "/installningar/skarm", label: "Kontorsskärm" },
+    { href: "/installningar/loge", label: "Logeskärm" },
     { href: "/anvandare", label: "Användare", adminOnly: true },
     { href: "/konto", label: "Mitt konto" },
   ],

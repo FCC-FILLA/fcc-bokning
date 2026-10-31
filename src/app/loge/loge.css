@@ -1,0 +1,103 @@
+/* Logeskärmen: samma FCC-röda uttryck som kontorsskärmen, men lugnare och större för artister. Allt ligger under .loge. */
+.loge {
+  --l-bg: #60272b;                         /* FCC:s profilfärg */
+  --l-panel: rgba(255, 255, 255, .07);
+  --l-panel-2: rgba(255, 255, 255, .14);
+  --l-line: rgba(255, 255, 255, .6);
+  --l-rule: rgba(255, 255, 255, .28);
+  --l-fg: #ffffff;
+  --l-muted: rgba(255, 255, 255, .74);
+
+  position: fixed; inset: 0;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 1.4em;
+  /* Marginal mot TV:ns överskanning, samma som kontorsskärmen. */
+  padding: 4vh max(3vw, env(safe-area-inset-right, 0px)) 4vh max(3vw, env(safe-area-inset-left, 0px));
+  background: var(--l-bg); color: var(--l-fg);
+  font-family: var(--font-sans); font-size: clamp(14px, 1.1vw, 26px); line-height: 1.35;
+  color-scheme: dark; overflow: hidden;
+}
+.loge h1, .loge h2 { font-family: var(--font-display); margin: 0; }
+.loge p, .loge ul, .loge ol, .loge dl, .loge dd { margin: 0; padding: 0; }
+.loge li { list-style: none; }
+.loge-time, .loge-run-time { font-variant-numeric: tabular-nums; }
+
+/* Huvud */
+.loge-head { display: flex; align-items: center; justify-content: space-between; gap: 1em; flex-wrap: wrap; border-bottom: 2px solid var(--l-fg); padding-bottom: .8em; }
+.loge-logo { height: 3.2em; width: auto; max-width: 100%; display: block; }
+.loge-head-right { display: flex; align-items: center; gap: 1.6em; flex-wrap: wrap; }
+.loge-clock { text-align: right; }
+.loge-time { font-family: var(--font-display); font-size: 3.4em; font-weight: 500; line-height: 1; }
+.loge-date { color: var(--l-muted); margin-top: .25em; }
+
+.loge-lang { display: inline-flex; border: 1px solid var(--l-line); border-radius: 99px; padding: .2em; gap: .2em; }
+.loge-lang button { font: inherit; font-size: .85em; font-weight: 600; color: var(--l-fg); background: transparent; border: 0; border-radius: 99px; padding: .35em .9em; cursor: pointer; }
+.loge-lang button[aria-pressed="true"] { background: var(--l-fg); color: var(--l-bg); }
+.loge-lang button:focus-visible { outline: 2px solid var(--l-fg); outline-offset: 2px; }
+
+/* Kolumner */
+.loge-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 2em; min-height: 0; }
+.loge-main.no-cam { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+.loge-col, .loge-info { overflow: hidden; min-height: 0; }
+.loge-fitted { display: flex; flex-direction: column; gap: 1.3em; }
+.loge-side { display: flex; flex-direction: column; gap: 1.3em; min-height: 0; }
+.loge-info { flex: 1; }
+
+.loge-hello span { display: block; text-transform: uppercase; letter-spacing: .14em; font-size: .9em; color: var(--l-muted); }
+.loge-hello h1 { font-size: 3.2em; font-weight: 500; line-height: 1.05; text-wrap: balance; margin-top: .1em; }
+
+.loge-next { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3em .8em; padding: .8em 1em; border: 2px solid var(--l-fg); border-radius: .6em; background: var(--l-panel-2); font-size: 1.25em; }
+.loge-next b { font-family: var(--font-display); font-weight: 500; font-size: 1.15em; }
+.loge-next > span:last-child { color: var(--l-muted); }
+
+.loge-tag { display: inline-block; padding: .25em .7em; border-radius: 99px; background: var(--l-fg); color: var(--l-bg); font-size: .62em; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; align-self: center; white-space: nowrap; }
+.loge-next .loge-tag { font-size: .55em; }
+
+.loge-block h2, .loge-wifi h2 { font-size: 1em; font-weight: 600; text-transform: uppercase; letter-spacing: .12em; margin-bottom: .6em; }
+.loge-run li { display: grid; grid-template-columns: 5.2em minmax(0, 1fr) auto; gap: 1em; align-items: center; padding: .55em 0; border-top: 1px solid var(--l-rule); }
+.loge-run li:first-child { border-top: 0; }
+.loge-run-time { font-family: var(--font-display); font-size: 1.2em; font-weight: 500; }
+.loge-run-what { display: grid; min-width: 0; }
+.loge-run-what b { font-weight: 600; font-size: 1.1em; }
+.loge-run-what small { color: var(--l-muted); font-size: .85em; }
+.loge-run li.is-past { opacity: .45; }
+.loge-run li.is-now { background: var(--l-panel-2); border: 2px solid var(--l-fg); border-radius: .5em; padding-inline: .7em; margin-inline: -.7em; }
+.loge-run li.is-now + li { border-top-color: transparent; }
+
+.loge-muted { color: var(--l-muted); }
+.loge-empty { font-size: 1.3em; }
+.loge-others li { padding: .2em 0; color: var(--l-muted); }
+.loge-others .loge-run-time { font-size: 1em; color: var(--l-fg); margin-right: .5em; }
+
+/* Kamera */
+.loge-cam { position: relative; aspect-ratio: 16 / 9; max-width: 100%; max-height: 50%; border: 2px solid var(--l-line); border-radius: .6em; overflow: hidden; background: #000; flex: none; }
+.loge-cam-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border: 0; background: #000; display: block; }
+.loge-cam-off { position: absolute; inset: 0; display: grid; place-items: center; color: var(--l-muted); background: var(--l-panel); padding: 1em; text-align: center; }
+.loge-cam-label { position: absolute; z-index: 1; top: .6em; left: .6em; display: inline-flex; align-items: center; gap: .45em; padding: .3em .7em; border-radius: 99px; background: rgba(0, 0, 0, .55); font-size: .75em; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+.loge-cam-label i { width: .6em; height: .6em; border-radius: 50%; background: #ff4d4d; }
+@media (prefers-reduced-motion: no-preference) {
+  .loge-cam-label i { animation: loge-blink 2s ease-in-out infinite; }
+  @keyframes loge-blink { 50% { opacity: .3; } }
+}
+
+/* Info: med kamera i två spalter under bilden, så att texten får vara stor. */
+.loge-main:not(.no-cam) .loge-info .loge-fitted { display: block; column-count: 2; column-gap: 2em; }
+.loge-main:not(.no-cam) .loge-info .loge-fitted > * { break-inside: avoid; margin-bottom: 1.1em; }
+
+/* Info */
+.loge-wifi { padding: .9em 1.1em; border: 1px solid var(--l-line); border-radius: .6em; background: var(--l-panel); }
+.loge-wifi dl { display: flex; flex-wrap: wrap; gap: .4em 2.4em; }
+.loge-wifi dt { color: var(--l-muted); font-size: .8em; text-transform: uppercase; letter-spacing: .08em; }
+.loge-wifi dd { font-family: var(--font-display); font-size: 1.4em; font-weight: 500; overflow-wrap: anywhere; }
+.loge-list li { position: relative; padding: .2em 0 .2em 1.1em; }
+.loge-list li::before { content: ""; position: absolute; left: 0; top: .78em; width: .45em; height: .45em; border-radius: 50%; background: var(--l-fg); }
+
+/* Mobil eller smal skärm: allt under varandra och sidan scrollar. */
+@media (max-width: 900px) {
+  .loge { position: static; min-height: 100dvh; overflow: visible; padding: 1.2em max(16px, env(safe-area-inset-right, 0px)) 1em max(16px, env(safe-area-inset-left, 0px)); }
+  .loge-main, .loge-main.no-cam { grid-template-columns: 1fr; }
+  .loge-col, .loge-info { overflow: visible; }
+  .loge-cam { max-height: none; }
+  .loge-main:not(.no-cam) .loge-info .loge-fitted { column-count: 1; }
+  .loge-time { font-size: 2.4em; }
+  .loge-hello h1 { font-size: 2.2em; }
+}

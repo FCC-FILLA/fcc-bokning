@@ -146,3 +146,37 @@ export async function rotateScreenToken() {
   revalidatePath("/installningar/skarm");
   redirect("/installningar/skarm?ny=1");
 }
+
+const LOGE_FIELDS = ["loge_camera_url", "loge_wifi_name", "loge_wifi_password", "loge_info_sv", "loge_info_en"] as const;
+
+/** Logeskärmens innehåll: kameralänk, Wi-Fi och praktisk info på svenska och engelska. */
+export async function saveLogeSettings(fd: FormData) {
+  if (!isAdmin(await requireProfile())) redirect("/installningar/loge?fel=" + encodeURIComponent("Bara administratörer kan ändra logeskärmen."));
+  const camera = String(fd.get("loge_camera_url") ?? "").trim();
+  if (camera && !/^https?:\/\/\S+$/i.test(camera)) {
+    redirect("/installningar/loge?fel=" + encodeURIComponent("Kameralänken måste börja med https:// (eller http://)."));
+  }
+  const now = new Date().toISOString();
+  const rows = LOGE_FIELDS.map((key) => ({
+    key,
+    value: String(fd.get(key) ?? "").trim().slice(0, key.startsWith("loge_info") ? 4000 : 1000),
+    updated_at: now,
+  }));
+  const supabase = await createClient();
+  const { error } = await supabase.from("app_settings").upsert(rows);
+  if (error) redirect("/installningar/loge?fel=" + encodeURIComponent("Det gick inte att spara."));
+  revalidatePath("/installningar/loge");
+  redirect("/installningar/loge?sparad=1");
+}
+
+/** Ny nyckel till logeskärmen. Den gamla länken slutar fungera direkt. */
+export async function rotateLogeToken() {
+  if (!isAdmin(await requireProfile())) redirect("/installningar/loge?fel=" + encodeURIComponent("Bara administratörer kan byta nyckel."));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("app_settings")
+    .upsert({ key: "loge_token", value: crypto.randomUUID(), updated_at: new Date().toISOString() });
+  if (error) redirect("/installningar/loge?fel=" + encodeURIComponent("Det gick inte att byta nyckel."));
+  revalidatePath("/installningar/loge");
+  redirect("/installningar/loge?ny=1");
+}

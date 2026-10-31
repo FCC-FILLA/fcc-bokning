@@ -1265,3 +1265,37 @@ describe("fastighet", () => {
     });
   });
 });
+
+describe("logeskärm", () => {
+  it("kräver nyckeln, visar bara kundsynliga punkter och läcker inga kunduppgifter", async () => {
+    const token = (await db.query<{ value: string }>("select value from app_settings where key = 'loge_token'")).rows[0].value;
+    const start = new Date(Date.now() + 60_000).toISOString();
+    const end = new Date(Date.now() + 3 * 3600e3).toISOString();
+    const ev = await book("Logetest", "bekraftad", "Karlbergssalen", start, end);
+    await db.query("update events set internal_notes = 'hemligt', participants = 4321 where id = $1", [ev]);
+    await db.query(
+      `insert into run_sheet_items (event_id, starts_at, title, customer_visible, staff_visible) values
+         ($1, $2, 'Soundcheck', true, true), ($1, $2, 'Intern genomgång', false, true)`,
+      [ev, start],
+    );
+
+    await db.exec("grant usage on schema public to anon; set role anon;");
+    try {
+      expect((await db.query<{ f: unknown }>("select loge_feed(gen_random_uuid()) as f")).rows[0].f).toBeNull();
+      const r = await db.query<{ f: { settings: Record<string, string>; events: { title: string; run_sheet: { title: string }[] }[] } }>(
+        "select loge_feed($1::uuid) as f", [token],
+      );
+      const f = r.rows[0].f;
+      const e = f.events.find((x) => x.title === "Logetest")!;
+      expect(e.run_sheet.map((x) => x.title)).toEqual(["Soundcheck"]);
+      expect(f.settings.loge_info_en).toContain("Stora salen");
+      expect(Object.keys(f.settings)).not.toContain("loge_token");
+      const json = JSON.stringify(f);
+      expect(json).not.toContain("hemligt");
+      expect(json).not.toContain("4321");
+      expect(json).not.toContain("Intern genomgång");
+    } finally {
+      await db.exec("reset role;");
+    }
+  });
+});
